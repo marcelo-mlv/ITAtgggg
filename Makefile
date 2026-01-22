@@ -29,3 +29,7 @@ clean-win:
 
 clean-linux-mac:
 	rm -r $(TEMP_DIR)/*
+
+clean-biber-cache:
+	# Clean only Biber cache (more targeted approach)
+	rm -rf /var/folders/*/par-*/cache-*/ 2>/dev/null || true
