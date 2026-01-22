@@ -82,8 +82,8 @@
 \gdef\nameengabstract{Abstract}
 \gdef\nametitlepage{Face Page}
 \gdef\namecip{Cataloging-in-Publication}
-\gdef\namepageexaminersbookmark{Thesis Committee Composition:}
-\gdef\namepageexaminers{Thesis Committee Composition:}
+\gdef\namepageexaminersbookmark{Committee Composition}
+\gdef\namepageexaminers{{\ifthenelse{\equal{\itaoptionlevel}{msc}}{Dissertation}{Thesis}} Committee Composition:}
 \gdef\namecontents{Contents}
 \gdef\nameannex{Annex}
 \gdef\itafigurenamebabel{FIGURE}
