@@ -144,6 +144,7 @@
 \RequirePackage[latin1,utf8]{inputenc} % latin -> utf . Modification to use idiomatic ascents directly: âáìõ
 \RequirePackage{setspace}
 \RequirePackage{fancyhdr}
+\RequirePackage{etoolbox}
 \RequirePackage{amsfonts}                 % Fontes p/ conjuntos: R,Z,H,...
 \RequirePackage{lastpage}
 \RequirePackage{indentfirst}
@@ -223,20 +224,69 @@
     style=biblatex-abnt/abnt,
     repeatfields, % removes dashed in repeated ref
     extrayear, % 2012a  in bibliography as well
-    bibstyle=biblatex-abnt/abnt,
-    citestyle=biblatex-abnt/abnt,
-    maxcitenames=4,
+    maxcitenames=3, % 4 or more, use et al.
     maxbibnames=99,
     giveninits=true,%abbreviate first name
     sortcites=true,
     doi=true,
     uniquename=mininit, % to distinguish same author
     uniquelist=minyear, % to distinguish same author and same year
-    backref=true,
+    backref=false,		% show page number of each citation
+    giveninits=true,
     % natbib=true,
     % citetracker=true,
     ]{biblatex}
 
+%% use these if the biblatex-abnt is not updated 
+%
+% % make citation "Nunes" instead of "NUNES"
+% \renewcommand*{\mkbibnamefamily}[1]{%
+%     \ifdefstring{\blx@delimcontext}{parencite}%
+%     {\MakeCapital{#1}}%
+%     {#1}%
+% }
+%
+% % et al. in italics
+% \DefineBibliographyExtras{english}{%
+%     \DeclareBibstringSet{latin}{andothers,ibidem}%
+%     \DeclareBibstringSetFormat{latin}{\mkbibemph{#1}}%
+% }%
+
+%==============================================================================
+% estilo de numeração para elementos pre-textuais
+%==============================================================================
+
+\fancypagestyle{plaintopright}{
+	\fancyhf{}
+	\fancyhead[R]{\thepage}	
+	\renewcommand{\headrulewidth}{0pt}
+	\renewcommand{\footrulewidth}{0pt}
+}
+
+
+%==============================================================================
+%%% Redefinicao de frontmatter
+%==============================================================================
+\renewcommand\frontmatter{%
+	\cleardoublepage
+	\@mainmatterfalse
+	\pagenumbering{roman}
+	\pagestyle{plaintopright}
+}
+
+%==============================================================================
+%%% Redefinicao de mainmatter para numeracao continua de paginas
+%==============================================================================
+\renewcommand\mainmatter{%
+  \cleardoublepage
+  \@mainmattertrue
+  \renewcommand{\thepage}{\arabic{page}}
+  % fixing fancy style from frontmatter
+  \fancyhead[R]{\thepage}
+  \fancyhead[L]{\leftmark}
+  \renewcommand{\headrulewidth}{0.5pt}
+  \pagestyle{fancy}
+  }
 
 
 %==============================================================================
@@ -498,7 +548,7 @@
 
    \noindent
 
-   \begin{spacing}{1.2}
+   \begin{spacing}{1.5}
    \noindent \parbox[c]{\textwidth}{\itaformattitletext{\itatitletext}}
    \end{spacing}
 
@@ -511,7 +561,7 @@
 
    \vspace*{\stretch{1}}
 
-   \begin{spacing}{1.2}
+   \begin{spacing}{2}
    \itaformatworktitle{\MakeUppercase{\@title}}
    \end{spacing}
 
@@ -542,9 +592,11 @@
 
    \vspace*{\stretch{2}}
 
-   \begin{spacing}{1.5}
-       \@boss
-   \end{spacing}
+	\@ifundefined{@boss}{}{ 
+		\begin{spacing}{1.5}
+			\@boss
+		\end{spacing}
+	}
 
    \vspace*{\stretch{2}}
 
@@ -705,15 +757,17 @@
 {
    \newpage
    \pdfbookmark[0]{\namepageexaminersbookmark}{aprovacao}
-   \thispagestyle{empty}
+%    \thispagestyle{plaintopright}
 
    \noindent
 
 	 \ifthenelse{\equal{\itaoptionlevel}{tg}}
 	     {
-			 \begin{spacing}{1.0}
        \begin{center}
-         \itaformatworktitle{\MakeUppercase{\@title}}
+	   	\begin{spacing}{2}
+			\itaformatworktitle{\MakeUppercase{\@title}}
+		\end{spacing}
+		\begin{spacing}{1.0}
          \vfill
          \small{\itathesisapprovedmemberstg}
 				 \vspace*{\stretch{3}}
@@ -759,14 +813,16 @@
 	     {
 	     \begin{spacing}{1.0}
        \begin{center}
-         \itaformatworktitle{\MakeUppercase{\@title}}
+	   \begin{spacing}{1.5}
+			\itaformatworktitle{\MakeUppercase{\@title}}
+		\end{spacing}
          \vfill
          \itaformatauthorname{\@authorfirst\ \@authorlast}
 				 \vfill
 			 \end{center}
 
 			 \raggedright{\normalsize{\namepageexaminers}}
-       \vfill
+		\vspace{12pt}
 
        \raggedright\@memberslist
 
@@ -781,7 +837,8 @@
 %%% Dedicatória...
 %==============================================================================
 \newenvironment{itadedication}
-{\thispagestyle{empty}%
+{
+%   \thispagestyle{plaintopright} 
   \pdfbookmark[0]{\namededicatory}{dedication}
   \begin{flushright}%
   \null\vfil \@beginparpenalty\@lowpenalty
@@ -803,6 +860,7 @@
 
 \newenvironment{itathanks}[1][\nameacknowledgment]
 {
+ \thispagestyle{plaintopright} 
  \chapter*{#1}
  \pdfbookmark[0]{\nameacknowledgment}{acknowledgment}
  }
@@ -811,25 +869,39 @@
 %==============================================================================
 %%% Resumo ...
 %==============================================================================
-\newenvironment{abstract}
-{\chapter*{\nameabstract}
- \pdfbookmark[0]{\nameabstract}{resumo}}{}
+\newenvironment{abstract}{
+	% \thispagestyle{plaintopright} 
+	\chapter*{\nameabstract}
+	\pdfbookmark[0]{\nameabstract}{resumo}}{}
 
 %==============================================================================
 %%% Abstract ...
 %==============================================================================
-\newenvironment{englishabstract}
-{\chapter*{\nameengabstract}
- \pdfbookmark[0]{\nameengabstract}{abstract}}{}
+\newenvironment{englishabstract}{
+	% \thispagestyle{plaintopright}  
+	\chapter*{\nameengabstract}
+	\pdfbookmark[0]{\nameengabstract}{abstract}}{}
 
 %==============================================================================
 %%% Redefinicao de chapter
 %==============================================================================
+% nao mostrar numeracao na pagina do capitulo e depois voltar com estilo utilizado
+% \renewcommand\chapter{\if@openright\cleardoublepage\else\clearpage\fi
+%                     \thispagestyle{empty}%
+%                     \global\@topnum\z@
+%                     \@afterindenttrue
+                    % \secdef\@chapter\@schapter}
 \renewcommand\chapter{\if@openright\cleardoublepage\else\clearpage\fi
-                    \thispagestyle{empty}%
+					\if@mainmatter
+						\thispagestyle{empty}
+					\else
+						\pagestyle{plaintopright}
+					\fi
                     \global\@topnum\z@
                     \@afterindenttrue
-                    \secdef\@chapter\@schapter}
+                    \secdef\@chapter\@schapter
+				}
+
 % Redefinicao do espaco entre paragrafos
 \setlength{\parskip}{.5em}
 
@@ -1143,13 +1215,6 @@
 }
 
 
-%==============================================================================
-%%% Redefinicao de mainmatter para numeracao continua de paginas
-%==============================================================================
-\renewcommand\mainmatter{%
-  \cleardoublepage
-  \@mainmattertrue
-  \renewcommand{\thepage}{\arabic{page}} }
 
 %==============================================================================
 %%% 'Desligar' hifenacao...
