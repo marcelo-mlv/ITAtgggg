@@ -169,8 +169,8 @@
 
 \gdef\itarefbibnamecipbabel{REFER\^{E}NCIA BIBLIOGR\'{A}FICA}
 
-\gdef\itacip2babel {\itaworklevel\ de \itaoptioncourse\ -- Instituto Tecnol\'{o}gico de Aeron\'{a}utica, 
-        S\~{a}o Jos\'{e} dos Campos.}
+\gdef\itacip2babel {\itaworklevel\ (\itaoptioncourse\ em \itaworkcourse) -- Instituto Tecnol\'{o}gico de Aeron\'{a}utica, 
+        S\~{a}o Jos\'{e} dos Campos, \@publyear.}
 				
 \gdef\itaciptg2babel {Trabalho de Conclus{\~a}o de Curso (Gradua{\c{c}}{\~a}o) -- Instituto Tecnol\'{o}gico de Aeron\'{a}utica, 
         S\~{a}o Jos\'{e} dos Campos.}

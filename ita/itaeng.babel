@@ -14,7 +14,7 @@
 %--------------------------------------------------------
 % Mestrado
 %--------------------------------------------------------
-\gdef\itaoptioncoursemscbabel{Master}
+\gdef\itaoptioncoursemscbabel{Master's degree}
 \gdef\itaworklevelmscbabel{Dissertation}
 \gdef\itaauthortitlemscbabel{Master of Science}
 \gdef\itaauthortitlemscfembabel{Master of Science}
@@ -154,7 +154,7 @@
 
 \gdef\itarefbibnamecipbabel{BIBLIOGRAPHIC REFERENCE}
 
-\gdef\itacip2babel {\itaworklevel\ of \itaauthortitle\ -- Instituto Tecnol\'{o}gico de Aeron\'{a}utica, S\~{a}o Jos\'{e} dos Campos.}
+\gdef\itacip2babel {\itaworklevel\ (\itaoptioncourse\ in \itaworkcourse) -- Instituto Tecnol\'{o}gico de Aeron\'{a}utica, S\~{a}o Jos\'{e} dos Campos, \@publyear.}
 
 \gdef\itaciptg2babel {Final paper (Undergraduation study) -- Instituto Tecnol\'{o}gico de Aeron\'{a}utica, 
         S\~{a}o Jos\'{e} dos Campos.}
