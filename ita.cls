@@ -237,6 +237,13 @@
     % citetracker=true,
     ]{biblatex}
 
+\DefineBibliographyStrings{english}{%
+	urlseen     = {accessed on},%
+	urlfrom     = {available at},%
+	editor      = {ed.},%
+	editors     = {ed.},%
+}
+
 %% use these if the biblatex-abnt is not updated 
 %
 % % make citation "Nunes" instead of "NUNES"
