@@ -158,7 +158,8 @@
 %==============================================================================
 %%% Glossário
 \RequirePackage{csquotes}
-\RequirePackage[acronym, toc, nogroupskip, sanitizesort]{glossaries}
+% \RequirePackage[acronym, toc, nogroupskip, sanitizesort]{glossaries}
+\RequirePackage[acronym, toc=false, nogroupskip, sanitizesort]{glossaries}
 \RequirePackage{xcolor}
 \glsenablehyper
 \colorlet{currenttext}{.} % get current color with xcolor pkg
@@ -999,41 +1000,40 @@
 
 % Lista de Símbolos...
 \newcommand\listofsymbols{%
-    %\begin{spacing}{1.5}   %ita
-    \if@twocolumn
-      \@restonecoltrue\onecolumn
-    \else
-      \@restonecolfalse
-    \fi
-    \chapter*{\listofsymbolsname
-      \@mkboth{\MakeUppercase{\listofsymbolsname}}%
-              {\MakeUppercase{\listofsymbolsname}}}%         Thanks to Reinaldo Fortes
-%    \addcontentsline{toc}{chapter}{\listofsymbolsname}%      Thanks to ffs  :-)
-		\pdfbookmark[0]{\listofsymbolsname}{listasimbolos}
-    \@starttoc{los}% If this command is enable list of symbols will appears with othe list (list of table or list of figures)
-    \if@restonecol\twocolumn\fi
-    %\end{spacing}   %ita
-    }
+	\printnoidxglossary[
+		title=\listofsymbolsname,
+		sort=use,   % according to abnt 14724 the list of symbols is sorted by order of use in text
+		nonumberlist]
+	\pdfbookmark[0]{\listofsymbolsname}{listasimbolos}
+}
+
+%% keeping old version here in case we miss some feature 
+% \newcommand\listofsymbols{%
+%     %\begin{spacing}{1.5}   %ita
+%     \if@twocolumn
+%       \@restonecoltrue\onecolumn
+%     \else
+%       \@restonecolfalse
+%     \fi
+%     \chapter*{\listofsymbolsname
+%       \@mkboth{\MakeUppercase{\listofsymbolsname}}%
+%               {\MakeUppercase{\listofsymbolsname}}}%         Thanks to Reinaldo Fortes
+% %    \addcontentsline{toc}{chapter}{\listofsymbolsname}%      Thanks to ffs  :-)
+% 		\pdfbookmark[0]{\listofsymbolsname}{listasimbolos}
+%     \@starttoc{los}% If this command is enable list of symbols will appears with othe list (list of table or list of figures)
+%     \if@restonecol\twocolumn\fi
+%     %\end{spacing}   %ita
+%     }
+
 
 % Lista de Abreviaturas...
 \newcommand\listofabbreviations{%
-    %\begin{spacing}{1.5}   %ita
-		\begin{flushleft}
-    \if@twocolumn
-      \@restonecoltrue\onecolumn
-    \else
-      \@restonecolfalse
-    \fi
-    \chapter*{{\listofabbreviationsname}
-      \@mkboth{\MakeUppercase{\listofabbreviationsname}}%       Thanks to Reinaldo Fortes
-              {\MakeUppercase{\listofabbreviationsname}}}%
-     %\addcontentsline{toc}{chapter}{\listofabbreviationsname}%  Thanks to ffs  :-)
-		\pdfbookmark[0]{\listofabbreviationsname}{listaabreviaturas}
-    \@starttoc{lof}%
-    \if@restonecol\twocolumn\fi
-    \end{flushleft}
-		%\end{spacing}   %ita
-    }
+	\printnoidxglossary[type=\acronymtype,
+		title=\listofabbreviationsname,
+		sort=standard,
+		nonumberlist]
+	\pdfbookmark[0]{\listofabbreviationsname}{listaabreviaturas}
+}
 
 
 % Thanks to Dr. Alan Wilter Sousa da Silva - alan@lncc.br
