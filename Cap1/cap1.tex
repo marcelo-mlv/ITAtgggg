@@ -1,118 +1,104 @@
-\section{Contextualization}
+\section{Context}
 
-\subsection{Capacity-Based Planning}
+\subsection{Capability-Based Planning}
 
-% Definição de CBP
-% Uso de CBP no MD
-% Relevância no contetxo de defesa aérea
+% Define Capability-Based Planning (CBP).
+% Explain the shift from threat-specific planning to capability-oriented planning.
+% Mention the most common CBP auxiliary resources currently cited in the TG:
+% Delphi Methodology, Cost and Operational Effectiveness Analysis,
+% Multi-Criteria Decision Analysis, and Modeling and Simulation.
+
+\subsection{CBP Applied to Air Defense}
+
+% Explain how CBP is applied in an air defense context.
+% Discuss examples such as force structure decisions, offensive versus defensive investment,
+% scenario analysis under resource constraints, doctrine formulation, and human capital optimization.
 
 \subsection{The Value of Modeling and Simulation in Decision Making}
 
-% Definição de M&S
-% Relevância de M&S como auxílio para tomada de decisão
+% Define Modeling and Simulation (M\&S).
+% Explain why M\&S is useful for decision support and for CBP activities.
+% State that M\&S allows the exploration of multiple scenarios, strategies, and outcomes.
 
-\subsection{ASA Project}
+\subsection{ASA Project and IEAv}
 
-% Descrição do projeto ASA e como ele auxilia na tomada de decisão de autoridades
-% Descrição do IEAv
+% Introduce Instituto de Estudos Avancados (IEAv).
+% Introduce ASA as a software ecosystem for the Brazilian Air Force.
+% Explain ASA as an M\&S solution that supports quantitative and statistically robust analysis
+% of aerospace defense scenarios.
 
 \subsection{Sensitivity Analysis}
 
-% Definição de SA
-% Exemplificação de funcionamento (imagem)
+% Define Sensitivity Analysis.
+% Explain how a parameter is varied throughout a simulation batch.
+% Introduce the notions of simulation result, metric, and aggregate result.
+% Mention that the aggregate result should express the correlation or effect of interest.
+
+\subsection{Quick Reaction Force: Defensive Intercept Scenario}
+
+% Describe the defensive intercept scenario presented in the TG-01 slides.
+% Explain the blue and red fighters, radar detection, and the retreat objective.
+% Use this example to connect scenario parameters to measurable outcomes such as survival rate.
+
+\subsection{Result, Metric, and Aggregate Result}
+
+% Define what raw simulation result means in the context of ASA.
+% Define metric as useful data extracted from each simulation.
+% Define aggregate result as the final simulation-batch outcome calculated from the metrics.
+% Explain the example involving the influence of radar longitude on blue fighters' survival time.
 
 \section{Motivation}
 
+\subsection{Distributed Processing Pipeline}
+
+% Define Distributed Processing as a computing method where tasks and data are spread across nodes.
+% Explain why this reduces total processing time.
+% Distinguish the Execution Stage from the Analysis and Aggregation Stage.
+% State that this work focuses on the Analysis and Aggregation Stage.
+
 \subsection{Distributed Processing of Simulation Results}
 
-% Explicação de como o Processamento Distribuído pode ser útil para processar os resultados de simulações
-% Explicação das 2 fases de simulação nas quais PD pode ser útil (Execution Stage e Analysis & Aggregation Stage)
+% Describe the current approach adopted in the ASA workflow.
+% Mention that simulation results are currently stored in a single database.
+% Mention that metrics are calculated serially and that the user must download raw results
+% and process them locally.
 
-% ---------------------------------------------------------------------------------------------
+\subsection{Current Analysis and Aggregation Bottlenecks}
 
-O objetivo deste projeto de mestrado é desenvolver técnicas de controle subótimo das juntas passivas (não atuadas) de um robô subatuado, incluindo o estudo teórico do tema, proposição de um método de controle e sua verificação
-experimental em um manipulador de três graus de liberdade \cite{Nascimento1970}.
+% Explain the bottlenecks associated with a single database instance.
+% Explain the bottlenecks associated with serial metric calculation.
+% Explain the impact of manual data transfer and local post-processing on the user workflow.
 
-O teste \cite{Patagonios2001} e validação das técnicas de controle propostas foram realizados em um ambiente de simulação e no manipulador
-experimental, adquirido através do projeto FAPESP $N^{\circ}$ 98/00649-5, que se encontra em funcionamento no \gls{lasi} do Departamento de Engenharia Elétrica da USP em São Carlos. De acordo com \textcite{Furmento1995}, pode-se listar:
-\begin{itemize}
-\item Isso;
-\item Aquilo; e
-\item Aquele outro.
-\end{itemize}
+\subsection{Motivation for Server-Side Processing}
 
-Então, no \gls{lasi} são realizadas as várias atividades listadas.
+% Explain why applying distributed processing to the Analysis and Aggregation Stage
+% can improve the current pipeline.
+% Discuss data locality, reduced network transfer, and faster batch turnaround.
+% Mention the importance of allowing the user to define an aggregate function before processing.
 
-\section{Motivação}
-Manipuladores mecânicos \cite{Sbornian2002} vêm sendo utilizados há várias décadas para a automação de tarefas
-repetitivas em ambientes industriais, ambientes estes de fácil acesso tanto em termos físicos quanto em termos de baixo
-risco à saúde humana. Nos últimos anos, verifica-se uma utilização cada vez maior de manipuladores em
-ambientes de difícil acesso ou inóspitos, como no interior de usinas nucleares, no fundo dos oceanos e no
-espaço. A localização dos manipuladores nesta nova gama de aplicações faz com que sua manutenção,após uma falha mecânica ou elétrica, seja custosa e demorada, portanto estes mecanismos requerem sofisticadas
-metodologias de controle tolerante a falhas \cite{ITALUS2004}.
+\section{Objective}
 
-Após a ocorrência de uma falha em um de seus atuadores, o manipulador torna-se um sistema subatuado. Um sistema também pode se tornar subatuado quando é projetado  dessa maneira, ou quando o operador deliberadamente mantém um ou mais atuadores disponíveis inoperantes durante uma tarefa. Reduzindo o número de atuadores sem reduzir o número de graus de
-liberdade e ajustando-se o sistema de controle adequado, pode-se obter um mecanismo cujo consumo de energia é menor, mas cujas propriedades são mantidas \cite{Arystides1994}.
+\subsection{General Objective}
 
-\begin{figure}[ht]
-\centering
-\includegraphics[width=0.5\textwidth]{Cap1/cupim}
-\caption{Proibido estacionar cupins. Legenda grande, com o objetivo de demonstrar a indentação na lista de figuras.}
-\label{cupim}
-\end{figure}
+% State the general objective of exploring a software solution for distributed processing
+% of scenario-based simulation outputs.
+% Mention user-defined metric and aggregate functions as key capabilities.
 
-Controle do manipulador após uma falha é fundamental do ponto de vista de operação, principalmente nos casos descritos acima, em que a localização do manipulador impede sua manutenção de forma fácil. Recentemente tem havido a combinação
-de algorítmos de detecção e isolação de falhas com os de controle pós-falha em um método unificado. Uma extensão desse trabalho, que vê o problema de controle tolerante a falhas através de uma perspectiva integrada, foi proposta por
-{marcel4}. Os autores apresentam um ambiente híbrido consistindo de três unidades básicas que garantem a compleição de tarefas na presença de qualquer número de juntas falhas (Fig.~\ref{cupim}). A primeira unidade é um esquema de detecção
-e isolação de falhas que continuamente monitora o manipulador para detectar e identificar possíveis falhas nas juntas. A segunda unidade é responsável pela reconfiguração do controle. A terceira unidade é composta de algorítmos de
-controle apropriados para cada tipo de configuração do robô, baseado na informação da unidade de reconfiguração \cite{COFFEE2000}.
+\subsection{In-Scope Elements}
 
-No presente trabalho nos concentramos na unidade de algorítmo de controle, e mais especificamente no problema de controle da posição  angular de uma junta falha para qualquer posição desejada de uma maneira subótima, quando dispomos
-de redundância de atuação para a realização dessa tarefa. O termo subótimo se deve ao fato de que não há garantias de otimalidade em vista das não-linearidades inerentes ao sistema e de outros fatores que serão abordados nos capítulos posteriores. Ao longo do texto, para simplificação, usaremos tanto o termo subótimo como ótimo para nos referirmos à metodologia utilizada.
+% List the elements that pertain to the current work's scope:
+% - interface for metric and aggregate function definition;
+% - distributed storage for simulation results;
+% - local cluster testing;
+% - integration with ASA systems.
 
-Segundo, o critério de otimização utilizado será o acoplamento entre as juntas do
-manipulador e neste caso, temos um sistema redundante quando ocorre falha de uma das juntas do manipulador de três juntas, e seu posicionamento é controlado pelas duas restantes. Nossa solução para o problema é baseada na formulação
-de redundância local, extensivamente estudada no contexto de cinemática inversa ({nakamura}). A principal contribuição deste trabalho é a extensão deste método usando as equações dinâmicas de manipuladores subatuados e a utilização do índice de acoplamento como um critério para a minimização do torque e da energia gasta pelo sistema durante o controle das juntas falhas.
+\subsection{Out-of-Scope Elements}
 
-\begin{figure}[ht!]
-\centering
-\includegraphics[width=1\textwidth]{Cap1/cupimconcreto}
-\caption{Exemplo real de cupim frente ao seu dilema.}
-\label{FDII}
-\end{figure}
+% List the elements that do not pertain to the current work's scope.
+% Include the execution stage and any other exclusions explicitly stated in the TG-01 slides.
 
-\section{Organização do trabalho}
-\subsection{Sub-organização}
-O capítulo 1 contém a introdução do trabalho, onde são expostos o objetivo, a motivação do mesmo, a descrição do sistema e a formulação do problema com a nomenclatura utilizada; além de uma revisão bibliográfica da literatura relacionada ao tema do trabalho.
+\subsection{Chapter Organization}
 
-\subsubsection{SubSub-organização}
-
-No capítulo 2 apresentamos a modelagem dinâmica de um manipulador subatuado e o conceito de índice de acoplamento para medir o acoplamento dinâmico entre as juntas ativas e passivas. Este índice é utilizado para a análise e projeto de uma metodologia de controle subótimo do manipulador.
-
-\subsubsection{Outra subsub-organizacao}
-
-O capítulo 3 apresenta o controle subótimo de manipuladores através de redundância de atuação. Descreve-se a técnica de controle ponto a ponto de manipuladores subatuados. A seguir mostramos  a linearização destes por realimentação, cujo efeito é linearizar e desacoplar o sistema não linear. Finalmente é proposta uma sequência de controle subótimo local das juntas passivas visando a minimização de certos critérios como torque, velocidade e em particular a energia consumida pelo sistema. Este é de fato o tema principal deste mestrado.
-
-É também apresentado no capítulo 4 um resumo do projeto de controladores  $H_{2}$ e $H_{\infty}$, cuja principal vantagem é a robustez na presença de incertezas paramétricas e distúrbios externos.
-
-O capítulo 5 mostra as características e a operação do robô e do ambiente de simulação utilizados nos testes e experimentação da metodologia apresentada \cite{2008Accettura}.
-
-Os procedimentos da metodologia e os resultados obtidos para algumas configurações e diferentes controladores encontram-se no capítulo 6.
-
-No capítulo 7 são apresentadas as conclusões do trabalho.
-
-Quatro apêndices fazem parte do trabalho. O apêndice A apresenta alguns tópicos de álgebra linear que são a base do método proposto. No apêndice B são mostradas as equações da matriz de inércia e do vetor de torques não-inerciais
-utilizados na modelagem dinâmica do manipulador. No apêndice C temos as expressões literais dessas equações feitas no software MAPLE e no apêndice D alguns programas feitos no software MATLAB utilizados no projeto \cite{Furmento1995, Morgado2003}.
-
-
-\subsection{Como utilizar o glossário}
-O glossário no \LaTeX é automatico, utilizando o pacote ``glossaries'', então basta adicionar as entradas em ``listaabreviaturas.tex'' e em ``listasimbolos.tex'' e utilizar o comando ``$\backslash$gls\{\}''.
-A lista de abreviaturas e de simbolos será gerada automaticamente de acordo com os elementos que foram utilizados no texto.
-
-A primeira vez que uma abreviatura é chamada é automaticamente representada em sua forma completa: \gls{ctq}.
-Ao utilizar o comando depois da primeira vez, apenas a abreviatura será utilizada: \gls{ctq}.
-
-O glossário também pode ser utilizado para simbolos matemáticos, então pode-se definir por exemplo uma variável delta de Kronecker e utilizar o comando ``$\backslash$gls\{\}'', \gls{delta_kro}. 
-Se houver a necessidade de modificar o simbolo utilizado, não precisa alterar todas as entradas ao longo da tese, basta alterar o simbolo em ``listadesimbolos.tex''.
-
-
+% Briefly explain how the remainder of the document is organized.
+% Connect Chapter 2 to the theoretical background and related work.
+% Connect Chapter 3 to the proposal and next steps.

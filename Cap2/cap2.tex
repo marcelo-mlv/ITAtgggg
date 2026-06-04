@@ -1,59 +1,76 @@
-In this chapter, we present the necessary background and technical concepts to understand and implement the proposed framework.
+In this chapter, we present the necessary background and technical concepts to understand the proposed distributed-processing architecture.
 
-% Contextualização Teórica
+\section{Background}
 
-\section{Distributed Processing}
+\subsection{ASA: A Software Solution for the Brazilian Air Force}
 
-% Definição de processamento distribuído
-% Map Reduce como paradigma de processamento distribuído
-% HDFS como sistema de arquivos distribuído
+% Describe ASA as a simulation ecosystem created for the Brazilian Air Force at IEAv.
+% Explain ASA's role in scenario creation, execution, and analysis.
+% Connect ASA to the decision-support perspective introduced in Chapter 1.
 
-\section{Modeling and Simulation}
+\subsection{Distributed Processing}
 
+% Define distributed processing in general computational terms.
+% Explain why it is relevant to large-scale simulation outputs.
+% Connect distributed processing to the Analysis and Aggregation Stage of the ASA workflow.
 
+\subsection{Distributed File Systems}
 
-% ---------------------------------------------------------------------------------------------
+% Define a Distributed File System (DFS).
+% Explain why a DFS is relevant for storing simulation results separately from a single database.
+% Introduce candidate technologies such as HDFS if they remain relevant to the final direction.
 
-\section{Modelagem no espaço das juntas}
-Manipuladores subatuados diferem dos totalmente atuados pois são equipados com um número de atuadores que é sempre menor que o número de \gls{graus_liberdade}. Portanto, nem todos os \gls{graus_liberdade} podem ser controlados ativamente ao mesmo tempo \cite{Sbornian2004}. Por exemplo, com um manipulador planar de 3 juntas equipado com dois atuadores, ou seja, duas juntas ativas e
-uma passiva, pode-se controlar ao mesmo tempo duas das juntas a qualquer instante, mas não todas. Para controlar todas as juntas de um manipulador subatuado, deve-se usar um controle sequencial. Este princípio foi provado pela primeira vez por {arai} usando  argumentos dinâmicos linearizados \cite{Joea2003}, e é a base para a modelagem no espaço das juntas e no espaço Cartesiano. A Tabela \ref{minhatab} apresenta os resultados \cite{Assenmacher1993,Silberschatz1991,Caromel1998}.
+\subsection{MapReduce}
 
-\begin{table}
-\caption{Exemplo de uma Tabela}
-\label{minhatab}
+% Define the MapReduce model.
+% Explain the stages of splitting, mapping, shuffling, and reducing.
+% Relate MapReduce to metric calculation and aggregate-result calculation over simulation batches.
 
-\center
-\begin{tabular}{cccc}
-  % after \\: \hline or \cline{col1-col2} \cline{col3-col4} ...
-  \hline
-	Parâmetro & Unidade & Valor da simulação & Valor experimental   \\
-	\hline
-  Comprimento, \gls{comprimento} & $m$ &  $8,23$  & $8,54$ \\
-  Altura, \gls{altura} & $m$     &  $29,1$ & $28,3$\\
-	Velocidade, \gls{velocidade} & $m/s$  &  $60,2$ & $67,3$\\
-	\hline
-\end{tabular}
-\end{table}
+\subsection{PySpark and DAG-Based Execution}
 
-Devido ao fato de que no máximo $n_{a}$ coordenadas generalizadas (ângulos das juntas ou variáveis cartesianas) podem ser controladas num dado instante, o vetor de coordenadas generalizadas é dividido em duas partes, representando as coordenadas generalizadas ativas e as coordenadas generalizadas passivas \cite{Callaghan1995}.
+% Introduce PySpark as the Python interface to Apache Spark.
+% Explain that Spark executes transformations through a Directed Acyclic Graph (DAG).
+% Connect DAG-based execution to the batch-processing needs of the ASA workflow.
 
-\begin{figure}[ht]
-\centering
-\includegraphics[width=0.75\textwidth]{Cap2/spiderrobot}
-\caption{Cupim cibernético.}\label{FDIII}
-\end{figure}
+\section{Related Work}
 
-Considerando um robô manipulador rígido, malha aberta, e de $n$-juntas em série. Seja $q$ a representação de seu vetor de posição angular das juntas  e $\tau$ a representação de seu vetor de torque. A equação dinâmica pelo método de
-Lagrange é dada por:
-\begin{equation} \label{eq:lagr1}
-\frac{d}{dt} \left( \frac{\partial L}{\partial \dot{q}} \right) -\frac{\partial L}{\partial q}=\tau^{T}.
-\end{equation}
-O Lagrangiano $L$ é definido como a diferença entre as energias cinética e potencial do sistema:
-\begin{equation} \label{L}
-L=T-P
-\end{equation}
+\subsection{Overview of Selected Works}
 
-A energia cinética total dos ligamentos é representada:
-\begin{equation} \label{energT}
-T=\frac{1}{2}\dot{q}^{T}M(q)\dot{q}
-\end{equation}
+% Introduce the four core related works currently selected in the TG:
+% Li et al. (2018), Lagares et al. (2022), Morrissey et al. (2020), and Friesen et al. (2016).
+% State why these works were selected as the closest baselines or contrasts.
+
+\subsection{Comparison Criteria}
+
+% Explain the meaning of the comparison-table columns currently used in the presentation:
+% Processing Paradigm, Data Access Pattern, Storage / File Format,
+% User Interface, Primary Goal, and Simulation Domain.
+% Add the TG and ASA fields that should also be compared against the literature:
+% black-box simulator assumption, analysis stage focus, persisted-output assumption,
+% user-defined aggregate function, and analyst-facing API/workflow.
+% Indicate where each type of information can be found in the selected works
+% available under ./context/artigos.
+
+\subsection{Closest Baselines}
+
+% Summarize why Li et al. (2018) and Lagares et al. (2022)
+% are the closest baselines for this thesis.
+% Explain how Morrissey et al. (2020) serves as an architectural reference.
+% Explain how Friesen et al. (2016) works as a contrast paper for in-situ and in-transit paradigms.
+
+\subsection{Identified Gaps}
+
+% State the gaps currently visible in the related-work review.
+% Include the fact that few works focus on the Analysis and Aggregation Stage.
+% Include the scarcity of works in the air-defense simulation domain.
+% Extend the gap discussion toward computational aspects such as:
+% - black-box simulators with already-persisted outputs;
+% - in-situ versus offline processing trade-offs;
+% - analyst-facing APIs and notebook-centric workflows;
+% - user-defined metric and aggregate functions;
+% - data locality and distributed storage.
+
+\subsection{Implications for This Thesis}
+
+% Explain how the identified gaps position the contribution of this TG.
+% Connect the literature review to the proposal chapter.

@@ -1,35 +1,65 @@
+\section{Proposal}
+
+\subsection{Current Processing Pipeline}
+
+% Describe the current Analysis and Aggregation Stage as presented in the TG-01 slides.
+% Mention the single database instance and the serial metric-calculation approach.
+% Explain the flow from simulation results to the final aggregate result in the current pipeline.
+
+\subsection{Scope of the Proposed Changes}
+
+% Clarify that the proposal targets only the Analysis and Aggregation Stage.
+% Reinforce that the execution stage is outside the present scope.
+
+\subsection{Proposed Processing Pipeline}
+
+% Describe the proposed pipeline with a Distributed File System in place of the current storage approach.
+% Explain the move from serial metric calculation to distributed metric calculation.
+% Connect the new pipeline to faster processing and reduced manual user intervention.
+
+\subsection{Distributed File System for Simulation Results}
+
+% Explain the role of the DFS in storing simulation results separately.
+% Discuss the expected benefits in data locality and network-transfer reduction.
+% Indicate the candidate DFS technology to be analyzed in the TG.
+
+\subsection{Metric Calculation and Aggregate Function}
+
+% Explain how raw results are transformed into metrics.
+% Explain how metrics are combined into an aggregate result through an aggregate function.
+% State that the user should be able to define or select these functions before processing the batch.
+
+\subsection{MapReduce / DAG-Based Processing Strategy}
+
+% Explain the intended processing strategy for the Analysis and Aggregation Stage.
+% Relate the map phase to per-simulation metric calculation.
+% Relate the reduce phase to aggregate-result calculation.
+% If the final implementation direction uses PySpark, connect this logic to DAG-based execution.
+
 \section{Next Steps}
 
-% Explicar os prox. passos da apresentação, basicamente:
+\subsection{Research Tasks}
 
-% Research:
-% Analyse MapReduce viability as a processing paradigm for this work’s needs;
-% Analyse Hadoop Distributed File System (HDFS);
-% Evaluate aggregate values other than Survival Time;
+% Analyse the viability of the selected distributed-processing paradigm for this work.
+% Analyse the viability of the selected distributed file system.
+% Identify metric functions other than Survival Time.
+% Analyse the code and architecture already available in the ASA project.
 
-% Implementation:
-% Analyse the code already made at the ASA project;
-% Implement a Distributed File System;
-% Implement MapReduce
-% Use docker to simulate a computer cluster locally;
-% Deploy the solution in ASA cluster afterwards;
+\subsection{Implementation Tasks}
 
-% ---------------------------------------------------------------------------------------------
+% Create an interface that allows the user to define an aggregate function
+% along with the simulation batch.
+% Implement a distributed storage layer for simulation results.
+% Implement the distributed processing strategy for simulation-result analysis.
+% Test the architecture in a local computer cluster.
+% Integrate the final solution into ASA systems.
 
-\section{Controle combinado}
-Conforme vimos na seção \ref{ectq3} podemos controlar um sistema nao linear como  através da técnica do torque computado, usando um controlador PD dado por:
-\begin{equation} \label{ectq3}
-\tau'=\ddot{q}_d+K_v(\dot{q}_d-\dot{q})+K_p(q_d-q) \; ,
-\end{equation}
-sendo $q_{d}$, $\dot{q}_{d}$ e $\ddot{q}_{d}$ a posição desejada, a velocidade desejada e a aceleração desejada; $K_p$
-e $K_v$ são matrizes diagonais $n \times n$, sendo que cada elemento da diagonal é um ganho positivo e escalar.
+\subsection{Evaluation Plan}
 
-Aqui $M_{est}$ e $b_{est}$ são modelos estimados da matriz de inércia, $M$, e do vetor de torques não inerciais, $b$, do robô real,  respectivamente. A equação de malha fechada do sistema é:
-\begin{equation} \label{ectq4}
-\ddot{e}+K_v\dot{e}+K_pe=M_{est}^{-1}[(M-M_{est})\ddot{q}+(b-b_{est})] \; .
-\end{equation}
+% Define how the final architecture will be evaluated.
+% Include execution-time comparison against the current serial pipeline.
+% Include qualitative evaluation criteria such as usability and integration effort.
 
-Em um manipulador real, podem existir distúrbios externos tais como atrito, variação de torque dos atuadores, e perturbações em virtude  das cargas no robô. Se a soma destes distúrbios for definida como $d_{ext}$ e adicionada à (\ref{ectq4}), teremos
-\begin{equation} \label{ectq5}
-\ddot{e}+K_v\dot{e}+K_pe=M_{est}^{-1}[(M-M_{est})\ddot{q}+(b-b_{est})+d_{ext}] \; .
-\end{equation}
+\subsection{Expected Contributions}
+% Summarize the expected contributions of the TG complete work.
+% Connect them to performance, architecture, and user workflow improvements.
