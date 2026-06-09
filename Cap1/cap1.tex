@@ -1,104 +1,35 @@
-\section{Context}
+\section{Contextualization}
 
-\subsection{Capability-Based Planning}
+Distributed computing emerged as a vital paradigm to address the fundamental limitations of centralized architecture, particularly when faced with the exponential growth of Big Data, complex simulations, and modern artificial intelligence. For decades, vertical scaling (scale-up) sufficed as hardware manufacturers consistently increased single-core processor speeds in accordance with Moore's Law \parencite{hennessy2019architecture}. 
 
-% Define Capability-Based Planning (CBP).
-% Explain the shift from threat-specific planning to capability-oriented planning.
-% Mention the most common CBP auxiliary resources currently cited in the TG:
-% Delphi Methodology, Cost and Operational Effectiveness Analysis,
-% Multi-Criteria Decision Analysis, and Modeling and Simulation.
+However, physical constraints such as quantum uncertainties and overheating and eventually created a severe infrastructure bottleneck, preventing Moore's Law's from staying true \parencite{waldrop2016moore}. By shifting the focus to horizontal scaling (scale-out), distributed processing connects an interconnected network of commodity computers, or nodes, to function as a unified system. This approach successfully mitigates the financial burden of high-end hardware, eliminates single points of failure through native fault tolerance, and solves the computational bottleneck by breaking down massive datasets into smaller, parallelizable tasks \parencite{sevilla2015framework}.
 
-\subsection{CBP Applied to Air Defense}
+The historical trajectory of this field reflects a steady evolution from isolated mainframes to global, ubiquitous networks. The foundational concepts were established in the 1960s and 1970s with early packet-switching networks like ARPANET, which transitioned in the 1980s into localized clusters tied together by early message-passing interfaces. By the late 1990s, the paradigm expanded into Grid Computing, utilizing idle worldwide resources for grand-challenge scientific problems \parencite{foster2003grid}. 
 
-% Explain how CBP is applied in an air defense context.
-% Discuss examples such as force structure decisions, offensive versus defensive investment,
-% scenario analysis under resource constraints, doctrine formulation, and human capital optimization.
+The definitive turning point arrived in the 2000s when technology giants introduced frameworks like MapReduce, which later inspired open-source ecosystems such as Apache Hadoop and Spark. Coupled with the rise of modern cloud computing, distributed processing evolved from an exclusive academic tool into the essential backbone of contemporary digital infrastructure, enabling real-time, resilient, and scalable data analytics across the globe \parencite{dean2004mapreduce}.
 
-\subsection{The Value of Modeling and Simulation in Decision Making}
-
-% Define Modeling and Simulation (M\&S).
-% Explain why M\&S is useful for decision support and for CBP activities.
-% State that M\&S allows the exploration of multiple scenarios, strategies, and outcomes.
-
-\subsection{ASA Project and IEAv}
-
-% Introduce Instituto de Estudos Avancados (IEAv).
-% Introduce ASA as a software ecosystem for the Brazilian Air Force.
-% Explain ASA as an M\&S solution that supports quantitative and statistically robust analysis
-% of aerospace defense scenarios.
-
-\subsection{Sensitivity Analysis}
-
-% Define Sensitivity Analysis.
-% Explain how a parameter is varied throughout a simulation batch.
-% Introduce the notions of simulation result, metric, and aggregate result.
-% Mention that the aggregate result should express the correlation or effect of interest.
-
-\subsection{Quick Reaction Force: Defensive Intercept Scenario}
-
-% Describe the defensive intercept scenario presented in the TG-01 slides.
-% Explain the blue and red fighters, radar detection, and the retreat objective.
-% Use this example to connect scenario parameters to measurable outcomes such as survival rate.
-
-\subsection{Result, Metric, and Aggregate Result}
-
-% Define what raw simulation result means in the context of ASA.
-% Define metric as useful data extracted from each simulation.
-% Define aggregate result as the final simulation-batch outcome calculated from the metrics.
-% Explain the example involving the influence of radar longitude on blue fighters' survival time.
+However, the impact of this MapReduce-driven revolution expanded far beyond commercial data mining and web search algorithms. This fundamental capability to fragment massive datasets into parallel, independent tasks became the vital engine for accelerating high-fidelity complex simulations. Fields demanding intensive mathematical modeling such as particle physics, computational fluid dynamics and aerospace simulations historically collided with the stark limitations of sequential processing. By translating the divide-and-conquer concepts popularized by MapReduce into High-Performance Computing (HPC) environments \parencite{ekanayake2010twister}, modern distributed systems can now simulate hyper-complex scenarios in record time \parencite{reed2015exascale}. What once required months of processing on a single centralized machine is now executed in a matter of hours or minutes across computing clusters, effectively transforming computing time from a scientific bottleneck into a catalyst for technological innovation.
 
 \section{Motivation}
 
-\subsection{Distributed Processing Pipeline}
+The amount of simulation data produced nowadays is also growing rapidly, especially in environments where multiple scenarios, parameter sweeps, and repeated executions are needed to support analytical decision making. In many scientific and industrial contexts, the main challenge is no longer only to execute simulations, but also to interpret the large volumes of output that they generate. Once the execution stage is complete, analysts still need to extract useful information from raw results, compare alternative scenarios, and transform those outputs into metrics that can support robust conclusions. This problem becomes particularly relevant when a simulation batch contains many runs and each run produces detailed records that must later be processed, filtered, and aggregated \parencite{li2018postprocessing,lagares2022aquila}.
 
-% Define Distributed Processing as a computing method where tasks and data are spread across nodes.
-% Explain why this reduces total processing time.
-% Distinguish the Execution Stage from the Analysis and Aggregation Stage.
-% State that this work focuses on the Analysis and Aggregation Stage.
+This situation leads to two immediate concerns. The first is how to store large amounts of simulation output in a way that remains scalable and accessible. The second is how to process these outputs efficiently once they have been generated. Even when the analysis required for each individual simulation is conceptually simple, the total cost may become substantial when the number of runs is large. A single machine may become a bottleneck both in storage access and in serial processing time, especially if the analyst must first move the raw data to a local environment before any meaningful reduction occurs. For this reason, distributed storage and distributed processing appear not as optional refinements, but as natural responses to the scale of the problem \parencite{ghemawat2003gfs,dean2004mapreduce}.
 
-\subsection{Distributed Processing of Simulation Results}
+Because of these challenges, modern computing has produced frameworks and tools that allow users to express large-scale distributed computations without manually orchestrating every communication and synchronization detail. Different systems emphasize different trade-offs, but most of them aim to provide the same core properties: scalability, fault tolerance, and a programming model that lets the user focus more on the analytical task than on the infrastructure itself. In the context of data-intensive analytics, the MapReduce model provided a foundational abstraction for batch-oriented distributed computation \parencite{dean2004mapreduce}, while later systems such as Spark expanded this model through richer DAG-based execution strategies suited to iterative and structured workloads \parencite{zaharia2012rdd,armbrust2015sparksql}. In this sense, the present thesis is not isolated from the broader history of distributed systems; rather, it is positioned within a long effort to make large-scale data processing both practical and reusable.
 
-% Describe the current approach adopted in the ASA workflow.
-% Mention that simulation results are currently stored in a single database.
-% Mention that metrics are calculated serially and that the user must download raw results
-% and process them locally.
+For simulation-based decision support, this discussion has a very concrete implication. If the outputs of a simulation batch can be partitioned, stored, and processed in parallel, then the time between executing the simulations and obtaining analytical insight can be reduced substantially. The analyst no longer needs to treat post-processing as a separate, mostly manual phase performed after data retrieval. Instead, the infrastructure itself can participate in the production of metrics and aggregate results. This is precisely the motivation of the present work: to understand how distributed-processing ideas can be applied not to the execution of the simulation itself, but to the analysis and aggregation stage that transforms raw simulation outputs into decision-support products.
 
-\subsection{Current Analysis and Aggregation Bottlenecks}
+\subsection{The ASA Project}
 
-% Explain the bottlenecks associated with a single database instance.
-% Explain the bottlenecks associated with serial metric calculation.
-% Explain the impact of manual data transfer and local post-processing on the user workflow.
+ASA (Ambiente de Simulação Aeroespacial) is a software ecosystem created for the modeling and simulation of military operational scenarios to support the development of tactics and procedures in the aerospace context for the Brazilian Air Force \parencite{dantas2025asa}. It supports scenario modeling via webstation. It also supports both simulation execution and output analysis via a custom python library (Asapy) \parencite{dantas2024asapy}, providing the Brazilian Air Force's higher command with quantitative and statistically robust analyses of outcomes of aerospace defense scenarios. The architectural solution addressed in this thesis concerns a specific bottleneck: while ASA excels at scenario execution, post-processing of large result volumes becomes inefficient when handled serially on a single machine. If the analyst must manually retrieve, structure, and aggregate raw results after each batch, the overall workflow becomes slower and less scalable.
 
-\subsection{Motivation for Server-Side Processing}
-
-% Explain why applying distributed processing to the Analysis and Aggregation Stage
-% can improve the current pipeline.
-% Discuss data locality, reduced network transfer, and faster batch turnaround.
-% Mention the importance of allowing the user to define an aggregate function before processing.
+The core contribution of this work is to improve how ASA simulation outputs are transformed into analytical products through distributed post-processing, without requiring changes to the core simulation logic or execution stage. 
 
 \section{Objective}
 
-\subsection{General Objective}
+The general objective of this work is to explore a software solution for the distributed processing of scenario-based simulation outputs in the ASA context. More specifically, the thesis aims to support a workflow in which the analyst can define or select a metric function and an aggregate function before the results of a simulation batch are processed. This keeps the analytical semantics close to the user's needs while relocating the computational burden to an infrastructure that is better suited to process large quantities of simulation outputs.
 
-% State the general objective of exploring a software solution for distributed processing
-% of scenario-based simulation outputs.
-% Mention user-defined metric and aggregate functions as key capabilities.
+The scope of the present thesis includes the design of an interface through which the user can define or select metric and aggregate functions, the storage of simulation outputs in a distributed file-oriented architecture, the implementation of a distributed post-processing strategy for the analysis and aggregation stage, the validation of this architecture in a local cluster environment, and the eventual integration of the resulting approach with ASA systems. These elements together define the intended contribution of the work: not a new simulation engine, but a new way to transform simulation outputs into useful analytical results more efficiently.
 
-\subsection{In-Scope Elements}
-
-% List the elements that pertain to the current work's scope:
-% - interface for metric and aggregate function definition;
-% - distributed storage for simulation results;
-% - local cluster testing;
-% - integration with ASA systems.
-
-\subsection{Out-of-Scope Elements}
-
-% List the elements that do not pertain to the current work's scope.
-% Include the execution stage and any other exclusions explicitly stated in the TG-01 slides.
-
-\subsection{Chapter Organization}
-
-% Briefly explain how the remainder of the document is organized.
-% Connect Chapter 2 to the theoretical background and related work.
-% Connect Chapter 3 to the proposal and next steps.
+By contrast, the execution stage of the simulations themselves is outside the scope of this thesis. The work does not aim to redesign the simulation engine, change the runtime logic by which individual simulations are executed, or optimize the internal physics or tactical behavior of the simulator. Likewise, broad benchmarking of every possible distributed-processing paradigm is not the primary goal of this work; rather, the goal is to justify and develop a coherent architecture for the A\&A stage. 
