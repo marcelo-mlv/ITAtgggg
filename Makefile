@@ -8,8 +8,7 @@ TEMP_DIR = tmp
 TEX = pdflatex
 BIB = biber
 TEX_FLAGS = --aux-directory=$(TEMP_DIR) -output-directory=$(OUT_DIR)
-LATEXMK_FLAGS = -pdf -synctex=1 --shell-escape -auxdir=$(TEMP_DIR) -outdir=$(OUT_DIR)
-
+LATEXMK_FLAGS = -pdf -bibtex -synctex=1 --shell-escape -auxdir=$(TEMP_DIR) -outdir=$(OUT_DIR)
 
 .PHONY:	all pdf bib clean
 
