@@ -1,5 +1,11 @@
 In this chapter, we present the technical background needed to understand the proposed distributed-processing architecture and position it within the existing literature.
 
+\section{The ASA Project}
+
+ASA (Ambiente de Simulação Aeroespacial) is a software ecosystem created for the modeling and simulation of military operational scenarios to support the development of tactics and procedures in the aerospace context for the Brazilian Air Force \parencite{dantas2025asa}. It supports scenario modeling via webstation. It also supports both simulation execution and output analysis via a custom python library (Asapy) \parencite{dantas2024asapy}, providing the Brazilian Air Force's higher command with quantitative and statistically robust analyses of outcomes of aerospace defense scenarios. The architectural solution addressed in this thesis concerns a specific bottleneck: while ASA excels at scenario execution, post-processing of large result volumes becomes inefficient when handled serially on a single machine. If the analyst must manually retrieve, structure, and aggregate raw results after each batch, the overall workflow becomes slower and less scalable.
+
+The core contribution of this work is to improve how ASA simulation outputs are transformed into analytical products through distributed post-processing, without requiring changes to the core simulation logic or execution stage. 
+
 \section{Capacity-Based Planning (CBP)}
 
 Capability-Based Planning (CBP) is a defense-planning approach centered on the capabilities required to accomplish missions under multiple plausible scenarios, rather than on a single predefined threat. In this perspective, the planning process asks which operational effects must be achieved and which combinations of systems, doctrine, personnel, and infrastructure are needed to achieve them robustly across different future situations. As discussed by \textcite{davis2002cbp}, CBP is particularly useful when uncertainty is high and when strategic decisions must remain valid under changing technological, political, and operational conditions.
