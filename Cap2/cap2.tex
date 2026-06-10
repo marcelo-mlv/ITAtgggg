@@ -170,13 +170,7 @@ The Google File System is a foundational example: it was designed to support ver
 
 For the present work, the relevance of a \gls{dfs} is straightforward. If raw results from many simulations are stored in a distributed file-oriented layer rather than in a single retrieval bottleneck, post-processing can be scheduled close to the output shards themselves. This does not eliminate all communication costs, but it reduces the need to move raw outputs to the analyst before any reduction has occurred. In practical terms, the \gls{dfs} becomes the persistence layer that supports server-side metric extraction and batch-level aggregation.
 
-Considering similar works such as \textcite{li2018postprocessing} and \textcite{morrissey2020velassco}, the \gls{dfs} framework adopted in this work will be the (\gls{hdfs}), as it provides high-throughput distributed storage, data locality, built-in fault tolerance, and seamless integration with the Hadoop/Spark ecosystem. These characteristics are particularly suitable for post-processing and analysis of large-scale simulation outputs. Compared with other distributed file systems, \gls{hdfs} offers a mature and widely adopted platform for combining scalable storage with distributed data processing, reducing implementation complexity while enabling efficient large-scale analytics.
-
-\section{PySpark}
-
-PySpark is the Python interface to Apache Spark, providing a high-level \gls{api} for distributed data processing while preserving the analytical flexibility expected in Python-based scientific workflows. In the context of this thesis, its adoption is justified because the analysis and aggregation stage can be naturally expressed as distributed transformations and aggregations over simulation outputs, with better scalability than serial post-processing and without requiring the analyst to abandon the Python ecosystem already used in \gls{asa}. In addition, PySpark integrates natively with Hadoop-compatible storage layers, including direct read/write support over \gls{hdfs}, which is consistent with the data-local architecture proposed for reducing transfer overhead and processing large simulation batches efficiently \parencite{zaharia2012rdd,sparkpysparkdocs}.
-
-Finally, related works such as \textcite{li2018postprocessing} reported successful adoption of PySpark combined with \gls{hdfs} for large-scale simulation data post-processing. The study highlights the suitability of Spark's distributed execution model for performing aggregation and analytical operations over datasets that exceed the capacity of a single workstation. The positive results obtained in such environments provide evidence that the Spark-\gls{hdfs} ecosystem constitutes a mature and scalable solution for scientific post-processing workloads.
+Considering similar works such as \textcite{li2018postprocessing} and \textcite{morrissey2020velassco}, the \gls{dfs} framework adopted in this work will be \gls{hdfs}, as it provides high-throughput distributed storage, data locality, built-in fault tolerance, and seamless integration with the Hadoop/Spark ecosystem. These characteristics are particularly suitable for post-processing and analysis of large-scale simulation outputs. Compared with other distributed file systems, \gls{hdfs} offers a mature and widely adopted platform for combining scalable storage with distributed data processing, reducing implementation complexity while enabling efficient large-scale analytics.
 
 \section{Related Work}
 
@@ -204,7 +198,7 @@ Two additional dimensions are particularly important for this thesis. The first 
 
 \subsection{Deelman et al.\ -- PEGASUS Workflow Management}
 
-\textcite{deelman2015pegasus} shows how workflow management systems formalize scientific pipelines as \gls{dag}s across heterogeneous computational resources. Although Pegasus is not an analyst-facing post-processing tool in the same sense as the architecture proposed here, it demonstrates that complex scientific processing pipelines benefit from explicit workflow representations and fault-aware orchestration.
+\textcite{deelman2015pegasus} shows how workflow management systems formalize scientific pipelines as direct acyclic graphs across heterogeneous computational resources. Although Pegasus is not an analyst-facing post-processing tool in the same sense as the architecture proposed here, it demonstrates that complex scientific processing pipelines benefit from explicit workflow representations and fault-aware orchestration.
 
 \subsection{Literature Gaps and Positioning}
 

@@ -1,38 +1,62 @@
-The current analytical pipeline considered in this thesis is shown in Figure~\ref{fig:current-pipeline} and can be summarized as follows:
+This chapter aims to present the proposed design for AeroSOuDA, the distributed computing architecture for aerospace simulation outputs.
+
+The current analytical pipeline considered here is shown in Figure~\ref{fig:current-pipeline} and can be summarized as follows:
 
 \begin{enumerate}
     \item A scenario is created and executed as a simulation batch, producing raw outputs for each individual run;
-    \item Those outputs are then stored centrally and must later be processed to derive metrics;
-    \item A batch-level aggregate result is produced as the final product of the simulation-batch execution pipeline.
+    \item Those outputs are then stored centrally in a single database instance and must later be processed manually to derive metrics;
+    \item Metrics are evaluated serially, since information is also retrieved serially from the database;
+    \item A batch-level aggregate result is manually produced as the final product of the simulation-batch execution pipeline.
 \end{enumerate}
 
-In practical terms, the \gls{aa} stage remains separated from the simulation stage and still depends on serial or analyst-side post-processing.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.82\textwidth]{Cap3/current-pipeline.png}
+    \caption{Current simulation-processing pipeline.}
+    \label{fig:current-pipeline}
+\end{figure}
 
-This architecture has two immediate consequences. First, it delays the production of the analytical products that are most relevant to decision support. Second, it forces the user to participate directly in tasks that could, in principle, be moved to the infrastructure side. The problem is therefore not only computational performance, but also workflow design: the system currently requires too much movement of raw data and too much manual orchestration between execution and interpretation.
+In the current workflow, metrics are evaluated serially after the simulation batch has been executed. This means that the analyst must retrieve raw outputs, interpret their structure, implement or execute the metric calculation logic, and only then derive the aggregate result of interest. Such a workflow may be manageable for small batches, but it becomes progressively less efficient as the number of runs and the size of the outputs increase.
 
-The changes proposed in this thesis are restricted to the A\&A stage. The execution stage of the simulations is intentionally preserved as an external dependency of the proposed architecture. This delimitation is important because it keeps the work focused on post-processing of already-generated outputs rather than on changing the internals of the simulator.
+The problem is not only computational, as it is also architectural. If the data produced by the simulation batch must be moved to the analyst's environment before any meaningful reduction occurs, the system ends up paying a high cost in network data transfer, storage concentration, and manual orchestration. For an environment whose purpose is to support repeated scenario analysis, this creates friction exactly where analytical agility is most needed.
 
-Within this scope, the proposal seeks to redesign how results are stored, how metrics are extracted, and how aggregate results are computed. In other words, the architecture aims to improve what happens after the batch has run, without redefining how the batch itself is executed.
+The first \gls{aa} bottleneck lies in the use of a single storage locus for the outputs relevant to post-processing. When a batch produces many result files or large result tables, concentrating the workflow around a single database or single retrieval path may increase contention and network transfer costs. The second bottleneck lies in serial metric calculation. If each run must be analyzed sequentially to derive the metric of interest, the overall turnaround time grows linearly with the batch size, even when the workload is naturally parallel.
 
-\section{Proposal}
+There is also a workflow bottleneck from the user's perspective. The current process requires the analyst to move from scenario execution to result retrieval and then to local or external post-processing. This separation weakens the analytical loop. In practice, one of the main promises of \gls{ms} for decision support is rapid exploration of alternatives; however, if result processing is slow or overly manual, the decision-support value of the simulation environment is diminished.
 
-The proposed pipeline replaces the current centralized analysis logic with a distributed architecture in which simulation outputs are stored in a distributed file system and processed in parallel. Conceptually, the workflow remains similar at a high level: simulation results are produced, transformed into metrics, and then combined into a batch-level result. The main difference is where and how these transformations occur. Instead of transferring large raw outputs to the analyst before reduction occurs, the infrastructure itself should perform the metric extraction and aggregation tasks as close as possible to the stored data.
+These limitations motivate a server-side, data-local approach to post-processing. Instead of moving raw simulation outputs to the analyst before any reduction occurs, the processing logic should be moved closer to where the data already resides. This principle is consistent with the broader rationale of distributed storage and distributed analytics systems, in which locality reduces unnecessary transfer and improves scalability \parencite{ghemawat2003gfs,dean2004mapreduce}.
+
+For this thesis' context, this means exploring an architecture in which:
+
+\begin{itemize}
+    \item Raw outputs are stored in a distributed manner (via \gls{hdfs});
+    \item Metrics are computed in parallel (MapReduce via PySpark);
+    \item Only the analytical products of interest (aggregate results) need to be delivered to the user.
+\end{itemize}
+
+\section{Proposed Architecture}
+
+The proposed architecture replaces the current centralized analysis logic with a distributed architecture in which simulation outputs are stored in a \gls{dfs} and processed in parallel. Conceptually, the workflow remains similar at a high level: simulation results are produced, transformed into metrics, and then combined into a batch-level result. The main difference is where and how these transformations occur. Instead of transferring large raw outputs to the analyst before reduction occurs, the infrastructure itself should perform the metric extraction and aggregation tasks as close as possible to the stored data.
 
 \begin{figure}[ht]
     \centering
     \includegraphics[width=0.82\textwidth]{Cap3/proposed-pipeline.png}
-    \caption{Proposed Pipeline.}
+    \caption{Proposed simulation-processing pipeline.}
     \label{fig:proposed-pipeline}
 \end{figure}
 
-This change is expected to improve the pipeline in three ways. First, it reduces unnecessary data movement through the network. Second, it allows independent simulation outputs to be processed concurrently. Third, it makes the analysis stage more consistent with the decision-support role of the overall system, since the user can request analytical products rather than manually orchestrate the intermediate steps. Similar motivations appear in prior work on distributed post-processing and large-scale simulation-data analytics \parencite{li2018postprocessing,morrissey2020velassco,lagares2022aquila}.
+This change is expected to improve the overall workflow in three ways:
 
-The distributed file system is the storage foundation of the proposed architecture. Its role is to persist simulation outputs in a way that supports parallel access and data-local processing. Rather than treating the simulation batch as a monolithic artifact that must be retrieved in full before any computation occurs, the \gls{dfs} allows the output space to be partitioned and accessed by multiple workers. This follows the general principle established in large-scale storage systems such as the Google File System, where reliability, partitioning, and locality are built into the storage design \parencite{ghemawat2003gfs}.
+\begin{enumerate}
+    \item By reducing unnecessary data movement through network;
+    \item By allowing independent simulation outputs to be processed concurrently;
+    \item By allowing the analyst user to request analytical products without manually orchestrating the intermediate steps.
+\end{enumerate}
 
-In the context of this thesis, the \gls{dfs} is not introduced as an abstract infrastructure preference, but as a direct response to the analysis bottleneck. If simulation results remain concentrated behind a single retrieval path, post-processing scales poorly. If, instead, the outputs are distributed and directly addressable across the storage layer, the analysis logic can operate on partitions closer to the data source. This makes the \gls{dfs} a necessary enabler of the distributed-processing stage rather than an isolated design choice.
+Similar motivations appear in prior work on distributed post-processing and large-scale simulation-data analytics \parencite{li2018postprocessing,morrissey2020velassco,lagares2022aquila}.
 
-The analytical model proposed in this thesis is based on two stages of transformation. The first stage converts raw outputs from each simulation into metrics. These metrics are run-specific quantities such as survival time, number of losses, or detection-related indicators. The second stage combines those metrics into an aggregate result over the whole batch. Depending on the analytical question, the aggregate result may take the form of an average, a distribution, a ranking, a correlation, or another summary object that supports decision-making.
+The analytical model proposed here is based on two stages of transformation. The first stage converts raw outputs from each simulation into metrics. These metrics are run-specific quantities such as survival time, number of losses, or detection-related indicators. The second stage combines those metrics into an aggregate result over the whole batch. Depending on the analytical question, the aggregate result may take the form of an average, a distribution, a ranking, a correlation, or another summary object that supports decision-making.
 
-This distinction is especially important because it gives the analyst explicit control over the semantics of the post-processing workflow. Instead of hard-coding a single output interpretation, the proposed architecture should allow the user to define or select the metric function and the aggregate function before processing begins. This design decision is consistent with the role of sensitivity analysis and scenario comparison in decision support: the same raw outputs may be interpreted differently depending on the question being asked \parencite{wieckowski2023sensitivity}.
+This distinction is especially important because it gives the analyst explicit control over the semantics of the post-processing workflow. Instead of hard-coding a single output interpretation, the proposed architecture should allow the user to define or select the metric function and the aggregate function before processing begins. This design decision is consistent with the role of \gls{SA} and scenario comparison in decision support: the same raw outputs may be interpreted differently depending on the question being asked \parencite{wieckowski2023sensitivity}.
 
-The computational strategy behind the proposal can be understood first through the MapReduce lens. At a conceptual level, the map stage corresponds to per-simulation metric extraction, while the reduce stage corresponds to the aggregation of those metrics into a batch-level result \parencite{dean2004mapreduce}. This decomposition is attractive because it mirrors the natural structure of the problem: independent runs first, cross-batch synthesis later.
+The computational strategy behind the proposal can be understood first through the MapReduce lens. At a conceptual level, the map stage corresponds to per-simulation metric extraction, while the reduce stage corresponds to the aggregation of those metrics into a batch-level result \parencite{dean2004mapreduce}.

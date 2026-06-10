@@ -22,8 +22,17 @@ For simulation-based decision support, this discussion has a very concrete impli
 
 \section{Objective}
 
-The general objective of this work is to explore a software solution for the distributed processing of scenario-based simulation outputs in \gls{asa}, a software solution made by the Brazilian Air Force. More specifically, this thesis aims to support a workflow in which the analyst can define or select a metric function and an aggregate function before the results of a simulation batch are processed. This keeps the analytical semantics close to the user's needs while relocating the computational burden to an infrastructure that is better suited to process large quantities of simulation outputs.
+This work aims to design and implement a distributed computing architecture for aerospace simulation environments. This architecture will be called ''AeroSOuDA'': \textbf{Aero}space \textbf{S}imulation \textbf{Ou}tput \textbf{D}istributed \textbf{A}rchitecture. The goal is to integrate the final solution to \gls{asa}, the project that motivated this work in the first place. In order achieve this goal, some rules must be established:
 
-The scope of this work includes the design of an interface through which the user can define or select metric and aggregate functions, the storage of simulation outputs in a distributed file-oriented architecture, the implementation of a distributed post-processing strategy for the analysis and aggregation stage, the validation of this architecture in a local cluster environment, and the eventual integration of the resulting approach with \gls{asa} systems. These elements together define the intended contribution of the work: not a new simulation engine, but a new way to transform simulation outputs into useful analytical results more efficiently.
+\begin{itemize}
+    \item The architecture must support a workflow in which the analyst can define or select via interface a metric function and an aggregate function before simulation batch execution;
+    \item The architecture must support any kind of metric and aggregate function;
+    \item The architecture must have a \gls{dfs} to store simulation results;
+    \item The primary language used will be Python, considering the robust ecosystem it brings, allowing us to analyse frameworks such as PySpark;
+    \item The architecture must be tested in a local computer cluster beforehand;
+    \item Considering a simulation batch, simulation results may an come at any order;
+    \item Each metric processing should run preferably in the same node its corresponding simulation was processed in order to reduce data transit via network;
+    \item The aggregate result shall assume at least 2 output types: numbers or graphic plots.
+\end{itemize}
 
-By contrast, the execution stage of the simulations themselves is outside the scope of this thesis. The work does not aim to redesign the simulation engine, change the runtime logic by which individual simulations are executed, or optimize the internal physics or tactical behavior of the simulator. Likewise, broad benchmarking of every possible distributed-processing paradigm is not the primary goal of this work; rather, the goal is to justify and develop a coherent architecture for the A\&A stage. 
+ These elements together define the intended contribution of the work: not a new simulation engine, but a new way to transform simulation outputs into useful analytical results more efficiently. By contrast, any improvement toward the simulation processing workflow is outside of the scope. The work does not aim to redesign the simulation engine, change the runtime logic by which individual simulations are executed, or optimize the internal physics or tactical behavior of the simulator. 
