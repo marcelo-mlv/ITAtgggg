@@ -27,7 +27,7 @@ Defense-oriented simulation has long been used for analysis, research and develo
 
 \section{Sensitivity Analysis (SA)}
 
-One of the most important kinds of simulation in this context is \gls{sa}. In broad terms, it is a specific kind of simulation that studies how variations in one or more input parameters influence the outputs of a model. In decision-analysis literature, it is used to evaluate robustness, expose influential parameters, and identify how stable conclusions remain under changing assumptions \parencite{wieckowski2023sensitivity}. In scenario-based simulation, the same logic applies: the analyst varies a parameter across a batch of runs and observes how the resulting outputs respond, enabling them to evaluate a correlation between two parameters.
+One of the most important kinds of simulation in this context is \gls{sa}. In broad terms, it is a specific kind of simulation that studies how variations in one or more input parameters (called sweep parameters) influence the output of a model. In decision-analysis literature, it is used to evaluate robustness, expose influential parameters, and identify how stable conclusions remain under changing assumptions \parencite{wieckowski2023sensitivity}. In scenario-based simulation, the same logic applies: the analyst varies a parameter across a batch of runs and observes how the resulting outputs respond, enabling them to evaluate a correlation between two parameters.
 
 For the present work, \gls{sa} is relevant because it provides a simple and concrete way to understand why simulation outputs need structured post-processing. Each simulation run may generate raw data, but the analyst is usually interested in derived quantities, such as survival time, mission success, or, in the \gls{sa} case, statistical relationships between a parameter and an outcome. Those derived quantities are not given directly by the simulator; they must be extracted, computed, and aggregated from raw simulation outputs.
 
@@ -40,7 +40,7 @@ To illustrate the context of this thesis, consider the defensive intercept scena
     \label{fig:webstation-example}
 \end{figure}
 
-Two blue fighters must enter enemy territory, reach designated points, and return successfully. Moreover, three red fighters are activated upon radar detection and engage in combat.
+Two blue fighters must enter enemy territory, reach designated points, and return successfully. Also, three red fighters are activated upon radar detection and engage in combat.
 
 Even in a simple setting such as this one, many analytical questions may arise. For instance, how sensitive is a certain outcome, such as the blue team survival rate, to the radar's longitude? Which variables should be tracked in order to support those comparisons?
 
@@ -54,14 +54,14 @@ In the workflow considered in this thesis, it is useful to distinguish three lev
     \item An \textit{aggregate value} is obtained by combining metrics from all runs in a simulation batch.
 \end{itemize}
 
-Also, an \textit{Aggregate Function} may be defined as the function used to obtain the aggregate value from each metric.
+Also, an \textit{aggregate function} may be defined as the function used to obtain the aggregate value from each metric.
 
 In the example provided above \gls{qr} scenario, if we run a simulation batch varying radar longitude in order to evaluate its correlation to the survival time of blue jets:
 
 \begin{itemize}
     \item A \textit{result} may include, for each frame, whether a fighter remains alive, when radar detection occurred, or when a combat event happened;
     \item A \textit{metric} may represent the blue fighter jets' survival time;
-    \item An \textit{aggregate value} may be the correlation or even a scatterplot between said survival time and the red team radar's longitude.
+    \item An \textit{aggregate value} may be the correlation (numerical result) or even a scatterplot between said survival time and the red team radar's longitude (visual result).
 \end{itemize}
 
 \section{Distributed Computing}
@@ -91,17 +91,8 @@ In the \gls{qr} scenario, considering the metrics are implicit inside \gls{aa} s
 
 \begin{itemize}
     \item The \textit{Scenario} box represents the \gls{qr} Scenario;
-    \item Each \textit{Simulation} box represents a different simulation instance. Each simulation:
-    \begin{itemize}
-        \item starts with a different radar longitude value;
-        \item returns if the jets are alive for each simulation frame (value in the \textit{Result} box);
-        \item generates the survival time metric at the end;
-    \end{itemize}
-    \item The \textit{aggregate value} box represents the aggregate value of the metrics. In this case, the aggregate function pairs each metric with the radar longitude for the respective simulation, becoming able to generate for the analyst user:
-    \begin{itemize}
-        \item the statistical correlation value between both parameters (numerical result);
-        \item a scatterplot graphic showing the metrics, in this case, ordered pairs (visual result);
-    \end{itemize}
+    \item Each \textit{Simulation} box represents a different simulation instance;
+    \item The \textit{aggregate value} box represents the aggregate value after combining all metrics.
 \end{itemize}
 
 Regarding Figure~\ref{fig:ms-general-pipeline} still, although distributed computing can be useful in both stages highlighted in red, this work focuses specifically on the \gls{aa} stage.
