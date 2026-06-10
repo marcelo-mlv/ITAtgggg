@@ -8,7 +8,7 @@ The core contribution of this work is to improve how \gls{asa}  simulation outpu
 
 \section{Capacity-Based Planning (CBP)}
 
-(\gls{cbp}) is a defense-pl1anning approach centered on the capabilities required to accomplish missions under multiple plausible scenarios, rather than on a single predefined threat. In this perspective, the planning process asks which operational effects must be achieved and which combinations of systems, doctrine, personnel, and infrastructure are needed to achieve them robustly across different future situations. As discussed by \textcite{davis2002cbp}, \gls{cbp} is particularly useful when uncertainty is high and when strategic decisions must remain valid under changing technological, political, and operational conditions.
+\gls{cbp} is a defense-planning approach centered on the capabilities required to accomplish missions under multiple plausible scenarios, rather than on a single predefined threat. In this perspective, the planning process asks which operational effects must be achieved and which combinations of systems, doctrine, personnel, and infrastructure are needed to achieve them robustly across different future situations. As discussed by \textcite{davis2002cbp}, \gls{cbp} is particularly useful when uncertainty is high and when strategic decisions must remain valid under changing technological, political, and operational conditions.
 
 From an analytical standpoint, \gls{cbp} depends on methods capable of comparing alternatives under uncertainty. That is why it is commonly associated with techniques such as Delphi-based elicitation, cost and operational effectiveness analysis, multi-criteria decision analysis, and modeling and simulation. In military environments, those techniques are not merely auxiliary tools; they are part of the evidence-generation process through which planners justify capability-development decisions \parencite{hodicky2020cbp}.
 
@@ -37,7 +37,7 @@ To illustrate the context of this thesis, consider the following defensive inter
 \begin{figure}[ht]
     \centering
     \includegraphics[width=0.82\textwidth]{Cap2/webstation-example.png}
-    \caption{Example of a defensive scenario modeled via Webstation}
+    \caption{Example of a defensive scenario modeled via Webstation.}
     \label{fig:webstation-example}
 \end{figure}
 
@@ -65,13 +65,21 @@ In the example provided above \gls{qr} scenario, if we run a simulation batch va
     \item An \textit{aggregate result} may be the correlation or even a scatterplot between said survival time and the red team radar's longitude.
 \end{itemize}
 
-This distinction is important for this thesis because the computational post-processing bottleneck aforementioned does not lie in the simulation execution itself, but in the processing pipeline from raw results to metrics and from metrics to batch-level analytical products.
+\section{Distributed Computing}
 
-\section{Distributed Processing}
+Distributed Computing is the field of computer science concerned with the execution of computations across multiple interconnected computing nodes that cooperate to solve a common problem. Instead of concentrating processing, memory, and storage resources in a single machine, distributed computing systems partition workloads among several autonomous nodes that communicate through a network and coordinate their actions through message exchange.
 
-Distributed processing is the use of multiple processing elements to perform computations cooperatively across a shared workload. In simulation-related research, this idea appears in both parallel and distributed simulation, where it may accelerate execution, distribute computational state, or support large-scale analytical post-processing \parencite{fujimoto2016pds}. In this thesis, distributed processing is not used to accelerate the simulator itself, but to accelerate the analytical treatment of the simulator's outputs.
+A widely adopted definition characterizes a distributed system as a collection of autonomous computing elements that appears to its users as a single coherent system \parencite{steen2016distributed}. This definition highlights two fundamental properties. First, the participating nodes operate independently, each possessing its own processing capabilities, local memory, and execution environment. Second, despite this physical distribution, the system presents a unified view to users and applications, abstracting the complexity of coordination and communication among nodes.
 
-This distinction is important because the proposed workload is naturally decomposable. A simulation batch consists of many individual runs, and each run generates raw outputs that can first be processed independently to derive metrics and then combined to obtain a batch-level aggregate result. Such a decomposition is structurally compatible with distributed data-processing strategies, especially those that separate per-item transformations from cross-batch aggregation.
+The main motivations for adopting distributed computing include scalability, fault tolerance, resource sharing, and performance improvement. By distributing data and computation across multiple machines, systems can process larger workloads than would be feasible on a single computer while also reducing the impact of individual node failures. These characteristics have made distributed computing a foundational paradigm for modern large-scale infrastructures, including cloud computing platforms, distributed file systems, big data processing frameworks, and high-performance computing environments.
+
+\subsection{Distribution Viability in a Simulation Workflow}
+
+In simulation-related research, distributed computing appears both during simulation execution and during post-processing stages. Simulation workloads can be partitioned across multiple processors or machines to reduce execution time, while large volumes of generated data can be analyzed using distributed frameworks that exploit parallelism and data locality.
+
+In this work, distributed computing is not used to accelerate the simulator itself, but rather to accelerate the analytical processing of the simulator's outputs. The former corresponds to the \textit{Execution Stage}, in which simulations are launched and executed. The latter corresponds to the \textit{Analysis and Aggregation Stage}, in which simulation outputs are processed into metrics and batch-level results.
+
+This distinction is important because the proposed workload is naturally decomposable. A simulation batch consists of many individual runs, and each run generates raw outputs that can first be processed independently to derive metrics and then combined to obtain a batch-level aggregate result. Such a decomposition is structurally compatible with distributed data-processing strategies.
 
 \begin{figure}[ht]
     \centering
