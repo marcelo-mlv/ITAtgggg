@@ -1,13 +1,8 @@
-This chapter aims to present the proposed design for AeroSOuDA, the distributed computing architecture for aerospace simulation outputs.
+This chapter aims to present the proposed design for AeroSOuDA, the distributed computing architecture for aerospace simulation outputs, comparing the a given current architecture and its struggles with a proposed solution for scalability and performance improvement.
+
+\section{Current Architecture}
 
 The current analytical pipeline considered here is shown in Figure~\ref{fig:current-pipeline} and can be summarized as follows:
-
-\begin{enumerate}
-    \item A scenario is created and executed as a simulation batch, producing raw outputs for each individual execution;
-    \item Those outputs are then stored centrally in a single database instance and must later be processed manually to derive metrics;
-    \item Metrics are evaluated serially, since information is also retrieved serially from the database;
-    \item A batch-level aggregate value is manually produced as the final product of the simulation-batch execution pipeline.
-\end{enumerate}
 
 \begin{figure}[ht]
     \centering
@@ -16,17 +11,20 @@ The current analytical pipeline considered here is shown in Figure~\ref{fig:curr
     \label{fig:current-pipeline}
 \end{figure}
 
-In the current workflow, metrics are evaluated serially after the simulation batch has been executed. This means that the analyst must retrieve raw outputs, interpret their structure, implement or execute the metric calculation logic, and only then derive the aggregate value of interest. Such a workflow may be manageable for small batches, but it becomes progressively less efficient as the number of runs and the size of the outputs increase.
+\begin{enumerate}
+    \item A scenario is created and executed as a simulation batch, producing raw outputs for each individual execution;
+    \item Those outputs are then stored centrally in a single database instance and must later be processed manually to derive metrics;
+    \item Metrics are evaluated serially, since information is also retrieved serially from the database;
+    \item A batch-level aggregate value is manually produced as the final product of the simulation-batch execution pipeline.
+\end{enumerate}
+
+In the current workflow, the analyst must retrieve raw outputs, interpret their structure, implement or execute the metric calculation logic, and only then derive the aggregate value of interest. Such a workflow may be manageable for small batches, but it becomes progressively less efficient as the number of runs and the size of the outputs increase.
 
 The problem is not only computational, as it is also architectural. If the data produced by the simulation batch must be moved to the analyst's environment before any meaningful reduction occurs, the system ends up paying a high cost in network data transfer, storage concentration, and manual orchestration. For an environment whose purpose is to support repeated scenario analysis, this creates friction exactly where analytical agility is most needed.
 
-The first \gls{aa} bottleneck lies in the use of a single storage locus for the outputs relevant to post-processing. When a batch produces many result files or large result tables, concentrating the workflow around a single database or single retrieval path may increase contention and network transfer costs. The second bottleneck lies in serial metric calculation. If each run must be analyzed sequentially to derive the metric of interest, the overall turnaround time grows linearly with the batch size, even when the workload is naturally parallel.
-
-There is also a workflow bottleneck from the user's perspective. The current process requires the analyst to move from scenario execution to result retrieval and then to local or external post-processing. This separation weakens the analytical loop. In practice, one of the main promises of \gls{ms} for decision support is rapid exploration of alternatives; however, if result processing is slow or overly manual, the decision-support value of the simulation environment is diminished.
-
 These limitations motivate a server-side, data-local approach to post-processing. Instead of moving raw simulation outputs to the analyst before any reduction occurs, the processing logic should be moved closer to where the data already resides. This principle is consistent with the broader rationale of distributed storage and distributed analytics systems, in which locality reduces unnecessary transfer and improves scalability \parencite{ghemawat2003gfs,dean2004mapreduce}.
 
-For this thesis' context, this means exploring an architecture in which:
+This thesis thus proposes an architecture implementation in which the simulation processing pipeline satisfies the following characteristics:
 
 \begin{itemize}
     \item Raw outputs are stored in a distributed manner (via \gls{hdfs});
