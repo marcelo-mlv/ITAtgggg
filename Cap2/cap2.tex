@@ -1,16 +1,17 @@
-In this chapter, we present the technical background needed to understand the proposed distributed-processing architecture and position it within the existing literature.
+In this chapter, we present the technical background needed to understand the proposed distributed computing architecture and position it within the existing literature.
 
 \section{The ASA Project}
 
-\gls{asa} is a software ecosystem created for the modeling and simulation of military operational scenarios to support the development of tactics and procedures in the aerospace context for the Brazilian Air Force \parencite{dantas2025asa}. It supports scenario modeling via webstation. It also supports both simulation execution and output analysis via a custom python library (Asapy) \parencite{dantas2024asapy}, providing the Brazilian Air Force's higher command with quantitative and statistically robust analyses of outcomes of aerospace defense scenarios. The architectural solution addressed in this thesis concerns a specific bottleneck: while \gls{asa} excels at scenario execution, post-processing of large result volumes becomes inefficient when handled serially on a single machine. If the analyst must manually retrieve, structure, and aggregate raw results after each batch, the overall workflow becomes slower and less scalable.
+\gls{asa} is a software ecosystem created for the modeling and simulation of military operational scenarios to support the development of tactics and procedures in the aerospace context for the Brazilian Air Force \parencite{dantas2025asa}. It supports scenario modeling and both simulation execution and output analysis via a custom python library named Asapy \parencite{dantas2024asapy}, providing the Brazilian Air Force's higher command with quantitative and statistically robust analyses of outcomes of aerospace defense scenarios. The architectural solution addressed in this thesis concerns a specific bottleneck: while \gls{asa} excels at scenario execution, post-processing of large result volumes becomes inefficient when handled serially on a single machine. If the analyst must manually retrieve, structure, and aggregate raw results after each batch, the overall workflow becomes slower and less scalable.
 
-The core contribution of this work is to improve how \gls{asa}  simulation outputs are transformed into analytical products through distributed post-processing, without requiring changes to the core simulation logic or execution stage. 
+The core contribution of this work is to improve simulation outputs are transformed into analytical products through distributed post-processing, without requiring changes to the core simulation logic. 
 
 \section{Capacity-Based Planning (CBP)}
 
 \gls{cbp} is a defense-planning approach centered on the capabilities required to accomplish missions under multiple plausible scenarios, rather than on a single predefined threat. In this perspective, the planning process asks which operational effects must be achieved and which combinations of systems, doctrine, personnel, and infrastructure are needed to achieve them robustly across different future situations. As discussed by \textcite{davis2002cbp}, \gls{cbp} is particularly useful when uncertainty is high and when strategic decisions must remain valid under changing technological, political, and operational conditions.
 
-From an analytical standpoint, \gls{cbp} depends on methods capable of comparing alternatives under uncertainty. That is why it is commonly associated with techniques such as Delphi-based elicitation, cost and operational effectiveness analysis, multi-criteria decision analysis, and modeling and simulation. In military environments, those techniques are not merely auxiliary tools; they are part of the evidence-generation process through which planners justify capability-development decisions \parencite{hodicky2020cbp}.
+
+From an analytical standpoint, \gls{cbp} depends on methods capable of comparing alternatives under uncertainty. That is why it is commonly associated with techniques such as Delphi-based elicitation \parencite{egfjord2020delphi}, and modeling and simulation. In military environments, those techniques are not merely auxiliary tools; they are part of the evidence-generation process through which planners justify capability-development decisions \parencite{hodicky2020cbp}.
 
 In an air-defense context, \gls{cbp} helps transform broad strategic concerns into concrete analytical questions. Instead of asking only which isolated system should be acquired or upgraded, planners may ask which capability mix is required to improve survivability, interception success, warning time, operational flexibility, or resource efficiency. This makes the planning process inherently scenario-based: the same force structure may perform differently depending on radar placement, enemy behavior, rules of engagement, and coordination between assets.
 
@@ -22,17 +23,15 @@ Air-defense planning therefore benefits from analytical environments in which mu
 
 In the context of operational planning and defense analysis, \gls{ms} serves as a bridge between strategic concepts and measurable operational effects. Rather than relying solely on intuition or historical precedent, planners can construct detailed scenarios, execute them repeatedly under different parameter values, and extract empirical evidence about how systems respond to changing conditions. This evidence generation process is essential for decisions that involve high costs, significant uncertainties, and interdependencies among many variables, precisely the characteristics of capability-based planning in complex domains such as aerospace defense.
 
-\gls{ms} is one of the main mechanisms through which \gls{cbp} becomes operationally useful. A simulation environment makes it possible to encode a scenario, vary parameters systematically, observe outcomes, and compare candidate decisions under controlled conditions. Defense-oriented simulation has long been used for analysis, research and development, test and evaluation, and training, precisely because it allows complex systems to be studied before costly real-world decisions are made \parencite{hodson2014lvc}.
-
-For decision support, the value of \gls{ms} lies not only in reproducing an environment, but in enabling structured experimentation. Different strategies, force compositions, parameter ranges, and environmental assumptions can be explored through repeated runs, and the resulting data can be transformed into metrics that support comparison. In that sense, \gls{ms} is aligned with the broader logic of \gls{cbp}: both depend on evaluating alternatives across multiple possible futures rather than optimizing for a single deterministic case \parencite{hodson2014lvc}.
+Defense-oriented simulation has long been used for analysis, research and development, test and evaluation, and training, precisely because it allows complex systems to be studied before costly real-world decisions are made \parencite{hodson2014lvc}. For decision support, the value of \gls{ms} lies not only in reproducing an environment, but in enabling structured experimentation. Different strategies, force compositions, parameter ranges, and environmental assumptions can be explored through repeated runs, and the resulting data can be transformed into metrics that support comparison.
 
 \section{Sensitivity Analysis (SA)}
 
 One of the most important kinds of simulation in this context is \gls{sa}. In broad terms, it is a specific kind of simulation that studies how variations in one or more input parameters influence the outputs of a model. In decision-analysis literature, it is used to evaluate robustness, expose influential parameters, and identify how stable conclusions remain under changing assumptions \parencite{wieckowski2023sensitivity}. In scenario-based simulation, the same logic applies: the analyst varies a parameter across a batch of runs and observes how the resulting outputs respond, enabling them to evaluate a correlation between two parameters.
 
-For the present work, \gls{sa} is relevant because it provides a simple and concrete way to understand why simulation outputs need structured post-processing. Each simulation run may generate raw records, but the analyst is usually interested in derived quantities, such as survival time, air threat index, mission success, or, in the \gls{sa} case, statistical relationships between a parameter and an outcome. Those derived quantities are not given directly by the simulator; they must be extracted, computed, and aggregated from raw simulation outputs.
+For the present work, \gls{sa} is relevant because it provides a simple and concrete way to understand why simulation outputs need structured post-processing. Each simulation run may generate raw data, but the analyst is usually interested in derived quantities, such as survival time, mission success, or, in the \gls{sa} case, statistical relationships between a parameter and an outcome. Those derived quantities are not given directly by the simulator; they must be extracted, computed, and aggregated from raw simulation outputs.
 
-To illustrate the context of this thesis, consider the following defensive intercept scenario, referred here as the \gls{qr} scenario:
+To illustrate the context of this thesis, consider the defensive intercept scenario from \ref{fig:webstation-example}, referred here as the \gls{qr} scenario:
 
 \begin{figure}[ht]
     \centering
@@ -43,7 +42,7 @@ To illustrate the context of this thesis, consider the following defensive inter
 
 Two blue fighters must enter enemy territory, reach designated points, and return successfully. Moreover, three red fighters are activated upon radar detection and engage in combat.
 
-Even in a simple setting such as this one, many analytical questions may arise naturally. For instance, how sensitive is the final outcome (blue team survival rate) to the radar longitude on the map? Which variables should be tracked in order to support those comparisons?
+Even in a simple setting such as this one, many analytical questions may arise. For instance, how sensitive is a certain outcome, such as the blue team survival rate, to the radar's longitude? Which variables should be tracked in order to support those comparisons?
 
 This type of scenario is representative of the analytical use case targeted by \gls{asa}. The objective is not merely to run one simulation and inspect it visually, but to run a simulation batch, vary selected parameters, and observe how the outcome changes across runs. This is a analytic-wise problem that heavily benefits from \gls{ms}.
 
@@ -52,17 +51,17 @@ In the workflow considered in this thesis, it is useful to distinguish three lev
 \begin{itemize}
     \item A \textit{result} is the raw data produced by an individual simulation run;
     \item A \textit{metric} is a useful quantity derived from a single simulation result;
-    \item An \textit{aggregate result} is obtained by combining metrics from all runs in a simulation batch.
+    \item An \textit{aggregate value} is obtained by combining metrics from all runs in a simulation batch.
 \end{itemize}
 
-Also, an \textit{Aggregate Function} may be defined as the function used to obtain the aggregate result from each metric.
+Also, an \textit{Aggregate Function} may be defined as the function used to obtain the aggregate value from each metric.
 
 In the example provided above \gls{qr} scenario, if we run a simulation batch varying radar longitude in order to evaluate its correlation to the survival time of blue jets:
 
 \begin{itemize}
-    \item A \textit{result} may include records indicating, for each frame, whether a fighter remains alive, when radar detection occurred, or when a combat event happened;
+    \item A \textit{result} may include, for each frame, whether a fighter remains alive, when radar detection occurred, or when a combat event happened;
     \item A \textit{metric} may represent the blue fighter jets' survival time;
-    \item An \textit{aggregate result} may be the correlation or even a scatterplot between said survival time and the red team radar's longitude.
+    \item An \textit{aggregate value} may be the correlation or even a scatterplot between said survival time and the red team radar's longitude.
 \end{itemize}
 
 \section{Distributed Computing}
@@ -79,7 +78,7 @@ In simulation-related research, distributed computing appears both during simula
 
 In this work, distributed computing is not used to accelerate the simulator itself, but rather to accelerate the analytical processing of the simulator's outputs. The former corresponds to the \textit{Execution Stage}, in which simulations are launched and executed. The latter corresponds to the \textit{Analysis and Aggregation Stage}, in which simulation outputs are processed into metrics and batch-level results.
 
-This distinction is important because the proposed workload is naturally decomposable. A simulation batch consists of many individual runs, and each run generates raw outputs that can first be processed independently to derive metrics and then combined to obtain a batch-level aggregate result. Such a decomposition is structurally compatible with distributed data-processing strategies.
+This distinction is important because the proposed workload is naturally decomposable. A simulation batch consists of many individual runs, and each run generates raw outputs that can first be processed independently to derive metrics and then combined to obtain a batch-level aggregate value. Such a decomposition is structurally compatible with distributed data-processing strategies.
 
 \begin{figure}[ht]
     \centering
@@ -98,7 +97,7 @@ In the \gls{qr} scenario, considering the metrics are implicit inside \gls{aa} s
         \item returns if the jets are alive for each simulation frame (value in the \textit{Result} box);
         \item generates the survival time metric at the end;
     \end{itemize}
-    \item The \textit{Aggregate Result} box represents the aggregate value of the metrics. In this case, the aggregate function pairs each metric with the radar longitude for the respective simulation, becoming able to generate for the analyst user:
+    \item The \textit{aggregate value} box represents the aggregate value of the metrics. In this case, the aggregate function pairs each metric with the radar longitude for the respective simulation, becoming able to generate for the analyst user:
     \begin{itemize}
         \item the statistical correlation value between both parameters (numerical result);
         \item a scatterplot graphic showing the metrics, in this case, ordered pairs (visual result);
@@ -122,13 +121,13 @@ MapReduce is a distributed programming model that decomposes a computation into 
 
 Figure~\ref{fig:mapreduce-overview} illustrates this model. The computation begins with the \textit{problem data}, representing the input dataset to be processed. A central \textit{master node} receives the job and is responsible for coordinating the execution. During the \textit{map} phase, the master partitions the input data into smaller independent tasks and distributes them among multiple \textit{worker nodes}. Each worker processes its assigned partition in parallel and produces intermediate results. The red arrows in the figure represent the distribution of work from the master to the workers.
 
-Once the mapping tasks have been completed, the intermediate results are returned to the master, as indicated by the blue arrows. During the \textit{reduce} phase, the master combines, aggregates, or summarizes the partial outputs generated by the workers. Depending on the application, this aggregation may involve operations such as summation, counting, averaging, merging data structures, or computing statistical metrics. The final aggregate result is then written to the \textit{solution data}, which represents the output dataset produced by the computation.
+Once the mapping tasks have been completed, the intermediate results are returned to the master, as indicated by the blue arrows. During the \textit{reduce} phase, the master combines, aggregates, or summarizes the partial outputs generated by the workers. Depending on the application, this aggregation may involve operations such as summation, counting, averaging, merging data structures, or computing statistical metrics. The final aggregate value is then written to the \textit{solution data}, which represents the output dataset produced by the computation.
 
 Although practical MapReduce implementations often include additional stages such as shuffling, sorting, fault tolerance, and data locality optimization, the fundamental idea remains the same: a master node coordinates a collection of workers that independently process partitions of the input data and subsequently contribute their partial results to a reduction step that generates the final solution. This model enables scalable processing by exploiting parallelism while presenting a relatively simple programming abstraction to the developer.
 
 That conceptual model maps naturally to the problem studied in this thesis. Each simulation output can first be transformed into one or more metrics independently from the others, which resembles the map phase. Then, metrics from all runs in the batch can be combined by an aggregate function, which resembles the reduce phase. Even if the final implementation does not use a canonical Hadoop MapReduce stack, the model remains useful because it provides a clean abstraction for structuring the analytical pipeline.
 
-At the same time, the literature also shows the limits of a purely MapReduce-oriented approach for richer multi-stage analytics. When workflows involve repeated transformations, structured queries, or multiple dependent operations over the same data, models based on richer execution graphs may offer better flexibility and lower overhead \parencite{zaharia2012rdd}. However, these limitations don't pose as a critical problem in our case, since both map and reduce stages can be well translated in our work's analytical pipeline as mentioned before.
+At the same time, the literature also shows the limits of a purely MapReduce-oriented approach for richer multi-stage analytics. When workflows involve repeated transformations, structured queries, or multiple dependent operations over the same data, models based on richer execution graphs may offer better flexibility and lower overhead \parencite{zaharia2012rdd}. However, these limitations don't pose as a critical problem in our case, since both map and reduce stages can be well translated in our work's analytical pipeline.
 
 \subsection{Apache Spark}
 
@@ -165,39 +164,23 @@ The Google File System is a foundational example: it was designed to support ver
 
 For the present work, the relevance of a \gls{dfs} is straightforward. If raw results from many simulations are stored in a distributed file-oriented layer rather than in a single retrieval bottleneck, post-processing can be scheduled close to the output shards themselves. This does not eliminate all communication costs, but it reduces the need to move raw outputs to the analyst before any reduction has occurred. In practical terms, the \gls{dfs} becomes the persistence layer that supports server-side metric extraction and batch-level aggregation.
 
-Considering similar works such as \textcite{li2018postprocessing} and \textcite{morrissey2020velassco}, the \gls{dfs} framework adopted in this work will be \gls{hdfs}, as it provides high-throughput distributed storage, data locality, built-in fault tolerance, and seamless integration with the Hadoop/Spark ecosystem. These characteristics are particularly suitable for post-processing and analysis of large-scale simulation outputs. Compared with other distributed file systems, \gls{hdfs} offers a mature and widely adopted platform for combining scalable storage with distributed data processing, reducing implementation complexity while enabling efficient large-scale analytics.
+Considering similar works such as \textcite{li2018postprocessing} and \textcite{morrissey2020velassco}, the \gls{dfs} framework adopted in this work will be \gls{hdfs}, as it provides high-throughput distributed storage, data locality, built-in fault tolerance, and seamless integration with the Hadoop/Spark ecosystem.
 
 \section{Related Work}
 
-Although the area of simulation result processing is still quite unexplored, some papers address this exact topic. In this section, we'll discuss some works that contributed to the development of this thesis.
+The most directly relevant works identified for this thesis are those that address large-scale post-processing of simulation data, distributed scientific analytics, or alternatives to offline post-processing. The comparison developed in this thesis uses criteria that help distinguish both technologies and problem settings:
 
-The most directly relevant works identified for this thesis are those that address large-scale post-processing of simulation data, distributed scientific analytics, or alternatives to offline post-processing. The comparison developed in this thesis uses criteria that help distinguish not only technologies, but also problem settings. Processing paradigm identifies whether the work relies on hybrid \gls{hpc} and big-data analytics, distributed data platforms, or in-situ / in-transit processing. Data access pattern indicates whether the analysis occurs offline after outputs are persisted, during simulation execution, or through distributed query layers. Storage and file format help reveal whether the solution expects specialized scientific formats, distributed key-value stores, or more generic file-oriented outputs.
+\begin{itemize}
+    \item \textit{Processing paradigm} identifies whether the work relies on hybrid \gls{hpc} and big-data analytics, distributed data platforms, or in-situ / in-transit processing;
+    \item \textit{Data access pattern} indicates whether the analysis occurs offline after outputs are persisted, during simulation execution, or through distributed query layers;
+    \item \textit{Storage and file format} help reveal whether the solution expects specialized scientific formats, distributed key-value stores, or more generic file-oriented outputs;
+    \item \textit{User interface} describes the nature of system access: some systems expose \gls{api}s, while others are designed primarily as infrastructure or embedded analysis layers;
+    \item \textit{Primary goal} specifies the system's objective, whether it is scalable post-processing, distributed visualization, workflow automation, or I/O reduction during execution.
+\end{itemize}
 
-Two additional dimensions are particularly important for this thesis. The first is the nature of the user interface: some systems expose \gls{api}s or notebook-friendly workflows, while others are designed primarily as infrastructure or embedded analysis layers. The second is the practical goal of the system, whether it is scalable post-processing, distributed visualization, workflow automation, or I/O reduction during execution. Together, these criteria make it possible to compare the current \gls{asa} workflow and the proposed TG architecture against the literature on more than one axis.
+Together, these criteria make it possible to compare the current \gls{asa} workflow and the proposed TG architecture against the literature on more than one angle.
 
-\subsection{Li et al.\ -- Post-processing with \gls{hpc} and Big-Data Analytics}
-
-\textcite{li2018postprocessing} is particularly important because it explicitly combines high-performance computing infrastructure with big-data tooling for post-processing simulation outputs. This work addresses the same general problem of combining cluster-based scientific computing with distributed analytics for simulation post-processing. The motivation is very close because it treats post-processing as a first-class computational stage rather than as a trivial downstream task.
-
-\subsection{Lagares et al.\ -- AQUILA Distributed Framework}
-
-\textcite{lagares2022aquila} presents a distributed and out-of-core post-processing framework for large-scale simulation data. Like Li et al., this work is particularly relevant because it demonstrates that scalable, distributed, and Python-accessible post-processing is itself a research problem worthy of dedicated system design. Among the selected works, both \textcite{li2018postprocessing} and \textcite{lagares2022aquila} are the closest baselines to the present thesis.
-
-\subsection{Morrissey et al.\ -- VELaSSCo Platform}
-
-\textcite{morrissey2020velassco} proposes a distributed platform for post-processing and visualization of extremely large \gls{dem} (Discrete Element Method) datasets. Although slightly more distant in implementation style, it is very important architecturally. The VELaSSCo platform embodies the principle of distributing access, analytics, and visualization over large simulation datasets rather than concentrating all work on the client side.
-
-\subsection{Friesen et al.\ -- In-Situ and In-Transit Analysis}
-
-\textcite{friesen2016insitu} represents a different paradigm, focusing on in-situ and in-transit analysis rather than post-processing over already-persisted outputs. This work serves as a contrast paper: it helps delimit what this thesis is not trying to do. Instead of tightly coupling analysis to the simulator runtime, the present work is concerned with outputs that have already been produced and persisted.
-
-\subsection{Deelman et al.\ -- PEGASUS Workflow Management}
-
-\textcite{deelman2015pegasus} shows how workflow management systems formalize scientific pipelines as direct acyclic graphs across heterogeneous computational resources. Although Pegasus is not an analyst-facing post-processing tool in the same sense as the architecture proposed here, it demonstrates that complex scientific processing pipelines benefit from explicit workflow representations and fault-aware orchestration.
-
-\subsection{Literature Gaps and Positioning}
-
-Tables~\ref{tab:processing_paradigms_a} and~\ref{tab:processing_paradigms_b} summarize the nuances between each study mentioned here.
+Tables~\ref{tab:processing_paradigms_a} and~\ref{tab:processing_paradigms_b} summarize the nuances between each study to be mentioned in this section.
 
 \begin{table}[htbp]
     \centering
@@ -247,8 +230,12 @@ Tables~\ref{tab:processing_paradigms_a} and~\ref{tab:processing_paradigms_b} sum
     \end{tabularx}
 \end{table}
 
-The literature reveals a set of gaps that are highly relevant to the \gls{asa} context. First, relatively few works focus on the analysis and aggregation stage as an autonomous architectural problem. In many cases, attention is concentrated on simulation execution, workflow orchestration in general, or in-situ analysis embedded in the simulator. Second, the air-defense simulation domain itself is much less represented than fields such as molecular dynamics, \gls{cfd} (Computational Fluid Dynamics), \gls{dem} (Discrete Element Method), or cosmology \parencite{li2018postprocessing,lagares2022aquila,morrissey2020velassco,friesen2016insitu}.
+\subsection{Related Works Analysis}
 
-There are also computational gaps. Many proposed solutions assume tight access to the simulator internals or to specialized scientific formats and infrastructures. Fewer works address black-box simulators that already produce persisted outputs and still need an analyst-facing post-processing workflow. Likewise, the literature does not strongly emphasize the combination of distributed storage, batch-level metric extraction, user-defined aggregate functions, and Python-centric interaction as a unified architectural problem. This gap becomes even more visible when considering notebook-centered workflows, which are increasingly important in scientific computing but are not the primary focus of many classical \gls{hpc} pipelines \parencite{deelman2015pegasus}.
+Among the selected works, \textcite{li2018postprocessing} and \textcite{lagares2022aquila} are particularly relevant as they explicitly combine high-performance computing with distributed analytics for post-processing, demonstrating that scalable, distributed, and Python-accessible post-processing is itself a research problem worthy of dedicated system design. \textcite{morrissey2020velassco} proposes a distributed platform for post-processing and visualization of extremely large \gls{dem} datasets, embodying the principle of distributing access, analytics, and visualization over large simulation datasets rather than concentrating all work on the client side. In contrast, \textcite{friesen2016insitu} focuses on in-situ and in-transit analysis rather than post-processing over already-persisted outputs, serving as a boundary definition for what this thesis is not attempting. Finally, \textcite{deelman2015pegasus} demonstrates that complex scientific processing pipelines benefit from explicit workflow representations and fault-aware orchestration across heterogeneous computational resources.
 
-These observations position the present thesis in a specific niche: distributed post-processing of already-persisted simulation outputs in a scenario-based aerospace-defense environment, with a workflow that remains accessible to the analyst. The thesis does not attempt to replace the simulator or to embed analysis within it. Instead, it addresses the intermediate space between centralized serial post-processing and tightly coupled in-situ analysis.
+The literature reveals a set of gaps that are highly relevant to the \gls{asa} context. First, relatively few works focus on the \gls{aa} stage as an autonomous architectural problem. In many cases, attention is concentrated on simulation execution, workflow orchestration in general, or in-situ analysis embedded in the simulator. Second, the air-defense simulation domain itself is much less represented than fields such as molecular dynamics, \gls{cfd} (Computational Fluid Dynamics), \gls{dem} (Discrete Element Method), or cosmology \parencite{li2018postprocessing,lagares2022aquila,morrissey2020velassco,friesen2016insitu}.
+
+There are also computational gaps. Many proposed solutions assume tight access to the simulator internals or to specialized scientific formats and infrastructures. Fewer works address black-box simulators that already produce persisted outputs and still need an analyst-facing post-processing workflow. Likewise, the literature does not strongly emphasize the combination of distributed storage, batch-level metric extraction, user-defined aggregate functions, and Python-centric interaction as a unified architectural problem.
+
+These observations position the present thesis in a specific setting: distributed post-processing of already-persisted simulation outputs in a scenario-based aerospace-defense environment, with a workflow that remains accessible to the analyst.

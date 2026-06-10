@@ -1,4 +1,4 @@
-The expected contribution of the complete work is a software architecture that improves the analysis and aggregation stage of scenario-based simulation outputs by combining distributed storage, distributed computing, and analyst-defined metric semantics. If successful, the resulting system should reduce the need for manual result transfer, shorten the time required to obtain analytical products from simulation batches, and provide a more scalable basis for future work in decision-support workflows built on \gls{asa}.
+The expected contribution of the complete work is a software architecture that improves the analysis and aggregation stage of scenario-based simulation outputs by combining distributed storage, distributed computing, and analyst-defined metric semantics. If successful, the resulting system should reduce the need for manual result transfer, shorten the time required to obtain analytical products from simulation batches, and provide a more scalable basis for future work in decision-support workflows built on \gls{asa}, helping \gls{cbp} analysis as a whole for the Brazilian Air Force.
 
 \section{Research and Validation}
 
@@ -11,9 +11,9 @@ The expected contribution of the complete work is a software architecture that i
 \section{Implementation}
 
 \begin{itemize}
-    \item Create a user interface for defining or selecting aggregate functions before processing;
+    \item Create a user \gls{api} for defining or selecting aggregate functions before processing;
     \item Implement a \gls{dfs} for simulation outputs;
-    \item Build distributed-processing logic to extract metrics and compute aggregate results;
+    \item Build distributed computing logic to extract metrics and compute aggregate values;
     \item Test the architecture on a local computer cluster;
     \item Progressively integrate this architecture into \gls{asa} systems.
 \end{itemize}

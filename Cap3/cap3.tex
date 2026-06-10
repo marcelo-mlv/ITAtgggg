@@ -3,10 +3,10 @@ This chapter aims to present the proposed design for AeroSOuDA, the distributed 
 The current analytical pipeline considered here is shown in Figure~\ref{fig:current-pipeline} and can be summarized as follows:
 
 \begin{enumerate}
-    \item A scenario is created and executed as a simulation batch, producing raw outputs for each individual run;
+    \item A scenario is created and executed as a simulation batch, producing raw outputs for each individual execution;
     \item Those outputs are then stored centrally in a single database instance and must later be processed manually to derive metrics;
     \item Metrics are evaluated serially, since information is also retrieved serially from the database;
-    \item A batch-level aggregate result is manually produced as the final product of the simulation-batch execution pipeline.
+    \item A batch-level aggregate value is manually produced as the final product of the simulation-batch execution pipeline.
 \end{enumerate}
 
 \begin{figure}[ht]
@@ -16,7 +16,7 @@ The current analytical pipeline considered here is shown in Figure~\ref{fig:curr
     \label{fig:current-pipeline}
 \end{figure}
 
-In the current workflow, metrics are evaluated serially after the simulation batch has been executed. This means that the analyst must retrieve raw outputs, interpret their structure, implement or execute the metric calculation logic, and only then derive the aggregate result of interest. Such a workflow may be manageable for small batches, but it becomes progressively less efficient as the number of runs and the size of the outputs increase.
+In the current workflow, metrics are evaluated serially after the simulation batch has been executed. This means that the analyst must retrieve raw outputs, interpret their structure, implement or execute the metric calculation logic, and only then derive the aggregate value of interest. Such a workflow may be manageable for small batches, but it becomes progressively less efficient as the number of runs and the size of the outputs increase.
 
 The problem is not only computational, as it is also architectural. If the data produced by the simulation batch must be moved to the analyst's environment before any meaningful reduction occurs, the system ends up paying a high cost in network data transfer, storage concentration, and manual orchestration. For an environment whose purpose is to support repeated scenario analysis, this creates friction exactly where analytical agility is most needed.
 
@@ -31,7 +31,7 @@ For this thesis' context, this means exploring an architecture in which:
 \begin{itemize}
     \item Raw outputs are stored in a distributed manner (via \gls{hdfs});
     \item Metrics are computed in parallel (MapReduce via PySpark);
-    \item Only the analytical products of interest (aggregate results) need to be delivered to the user.
+    \item Only the analytical products of interest (aggregate values) need to be delivered to the user (via Python \gls{api}).
 \end{itemize}
 
 \section{Proposed Architecture}
@@ -54,9 +54,3 @@ This change is expected to improve the overall workflow in three ways:
 \end{enumerate}
 
 Similar motivations appear in prior work on distributed post-processing and large-scale simulation-data analytics \parencite{li2018postprocessing,morrissey2020velassco,lagares2022aquila}.
-
-The analytical model proposed here is based on two stages of transformation. The first stage converts raw outputs from each simulation into metrics. These metrics are run-specific quantities such as survival time, number of losses, or detection-related indicators. The second stage combines those metrics into an aggregate result over the whole batch. Depending on the analytical question, the aggregate result may take the form of an average, a distribution, a ranking, a correlation, or another summary object that supports decision-making.
-
-This distinction is especially important because it gives the analyst explicit control over the semantics of the post-processing workflow. Instead of hard-coding a single output interpretation, the proposed architecture should allow the user to define or select the metric function and the aggregate function before processing begins. This design decision is consistent with the role of \gls{SA} and scenario comparison in decision support: the same raw outputs may be interpreted differently depending on the question being asked \parencite{wieckowski2023sensitivity}.
-
-The computational strategy behind the proposal can be understood first through the MapReduce lens. At a conceptual level, the map stage corresponds to per-simulation metric extraction, while the reduce stage corresponds to the aggregation of those metrics into a batch-level result \parencite{dean2004mapreduce}.
