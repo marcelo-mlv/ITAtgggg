@@ -11,10 +11,12 @@ The core contribution of this work is to improve simulation outputs are transfor
 \gls{cbp} is a defense-planning approach centered on the capabilities required to accomplish missions under multiple plausible scenarios, rather than on a single predefined threat. In this perspective, the planning process asks which operational effects must be achieved and which combinations of systems, doctrine, personnel, and infrastructure are needed to achieve them robustly across different future situations. As discussed by \textcite{davis2002cbp}, \gls{cbp} is particularly useful when uncertainty is high and when strategic decisions must remain valid under changing technological, political, and operational conditions.
 
 
+% REF-END-PARAGRAPH
 From an analytical standpoint, \gls{cbp} depends on methods capable of comparing alternatives under uncertainty. That is why it is commonly associated with techniques such as Delphi-based elicitation \parencite{egfjord2020delphi}, and modeling and simulation. In military environments, those techniques are not merely auxiliary tools; they are part of the evidence-generation process through which planners justify capability-development decisions \parencite{hodicky2020cbp}.
 
 In an air-defense context, \gls{cbp} helps transform broad strategic concerns into concrete analytical questions. Instead of asking only which isolated system should be acquired or upgraded, planners may ask which capability mix is required to improve survivability, interception success, warning time, operational flexibility, or resource efficiency. This makes the planning process inherently scenario-based: the same force structure may perform differently depending on radar placement, enemy behavior, rules of engagement, and coordination between assets.
 
+% REF-END-PARAGRAPH
 Air-defense planning therefore benefits from analytical environments in which multiple scenarios can be generated, executed, and compared in a structured manner. This is especially important when force design decisions must balance offensive and defensive investments, doctrinal alternatives, and constrained resources. In such cases, \gls{cbp} works as a bridge between high-level strategic questions and operationally grounded evaluations \parencite{davis2002cbp,hodicky2020cbp}.
 
 \section{Modeling and Simulation (M\&S)}
@@ -118,18 +120,22 @@ Although practical MapReduce implementations often include additional stages suc
 
 That conceptual model maps naturally to the problem studied in this thesis. Each simulation output can first be transformed into one or more metrics independently from the others, which resembles the map phase. Then, metrics from all runs in the batch can be combined by an aggregate function, which resembles the reduce phase. Even if the final implementation does not use a canonical Hadoop MapReduce stack, the model remains useful because it provides a clean abstraction for structuring the analytical pipeline.
 
+% REF-END-PARAGRAPH
 At the same time, the literature also shows the limits of a purely MapReduce-oriented approach for richer multi-stage analytics. When workflows involve repeated transformations, structured queries, or multiple dependent operations over the same data, models based on richer execution graphs may offer better flexibility and lower overhead \parencite{zaharia2012rdd}. However, these limitations don't pose as a critical problem in our case, since both map and reduce stages can be well translated in our work's analytical pipeline.
 
 \subsection{Apache Spark}
 
+% REF-END-PARAGRAPH
 Apache Spark is an open-source distributed computing framework designed for large-scale data processing. Unlike the traditional MapReduce model, which relies on multiple disk-based stages, Spark performs most computations in memory, significantly improving performance for iterative algorithms, interactive analysis, and complex data processing pipelines \parencite{zaharia2012rdd,sparkpysparkdocs}.
 
 Spark organizes computation through a cluster architecture composed of a driver process and multiple worker nodes. Applications are expressed as direct acyclic graphs of transformations and actions, allowing the execution engine to optimize task scheduling, data locality, and fault recovery automatically. The framework also provides a unified ecosystem that includes modules for SQL processing, machine learning, graph analytics, and stream processing, making it suitable for a wide range of data-intensive workloads.
 
+% REF-END-PARAGRAPH
 A key advantage of Spark in scientific computing environments is its integration with distributed storage systems such as \gls{hdfs}. By executing computations close to where data are stored, Spark reduces network transfer overhead and enables efficient processing of datasets that exceed the memory and storage capacity of a single machine. These characteristics have motivated its adoption in high-performance computing and large-scale simulation post-processing workflows \parencite{li2018postprocessing}.
 
 \subsection{PySpark}
 
+% REF-END-PARAGRAPH
 PySpark is the Python interface to Apache Spark, providing a high-level \gls{api} for distributed data processing while preserving the analytical flexibility expected in Python-based scientific workflows. In this work's context, its adoption is justified because the analysis and aggregation stage can be naturally expressed as distributed transformations and aggregations over simulation outputs, with better scalability than serial post-processing and without requiring the analyst to abandon the Python ecosystem already used in \gls{asa}. In addition, PySpark integrates natively with Hadoop-compatible storage layers, including direct read/write support over \gls{hdfs}, which is consistent with the data-local architecture proposed for reducing transfer overhead and processing large simulation batches efficiently \parencite{zaharia2012rdd,sparkpysparkdocs}.
 
 Finally, related works such as \textcite{li2018postprocessing} reported successful adoption of PySpark combined with \gls{hdfs} for large-scale simulation data post-processing. The study highlights the suitability of Spark's distributed execution model for performing aggregation and analytical operations over datasets that exceed the capacity of a single workstation. The positive results obtained in such environments provide evidence that the Spark-\gls{hdfs} ecosystem constitutes a mature and scalable solution for scientific post-processing workloads.
@@ -155,6 +161,7 @@ The Google File System is a foundational example: it was designed to support ver
 
 For the present work, the relevance of a \gls{dfs} is straightforward. If raw results from many simulations are stored in a distributed file-oriented layer rather than in a single retrieval bottleneck, post-processing can be scheduled close to the output shards themselves. This does not eliminate all communication costs, but it reduces the need to move raw outputs to the analyst before any reduction has occurred. In practical terms, the \gls{dfs} becomes the persistence layer that supports server-side metric extraction and batch-level aggregation.
 
+% REF-END-PARAGRAPH
 Considering similar works such as \textcite{li2018postprocessing} and \textcite{morrissey2020velassco}, the \gls{dfs} framework adopted in this work will be \gls{hdfs}, as it provides high-throughput distributed storage, data locality, built-in fault tolerance, and seamless integration with the Hadoop/Spark ecosystem.
 
 \section{Related Work}
@@ -223,6 +230,7 @@ Tables~\ref{tab:processing_paradigms_a} and~\ref{tab:processing_paradigms_b} sum
 
 Among the selected works, \textcite{li2018postprocessing} and \textcite{lagares2022aquila} are particularly relevant as they explicitly combine high-performance computing with distributed analytics for post-processing, demonstrating that scalable, distributed, and Python-accessible post-processing is itself a research problem worthy of dedicated system design. \textcite{morrissey2020velassco} proposes a distributed platform for post-processing and visualization of extremely large \gls{dem} datasets, embodying the principle of distributing access, analytics, and visualization over large simulation datasets rather than concentrating all work on the client side. In contrast, \textcite{friesen2016insitu} focuses on in-situ and in-transit analysis rather than post-processing over already-persisted outputs, serving as a boundary definition for what this thesis is not attempting. Finally, \textcite{deelman2015pegasus} demonstrates that complex scientific processing pipelines benefit from explicit workflow representations and fault-aware orchestration across heterogeneous computational resources.
 
+% REF-END-PARAGRAPH
 The literature reveals a set of gaps that are highly relevant to the \gls{asa} context. First, relatively few works focus on the \gls{aa} stage as an autonomous architectural problem. In many cases, attention is concentrated on simulation execution, workflow orchestration in general, or in-situ analysis embedded in the simulator. Second, the air-defense simulation domain itself is much less represented than fields such as molecular dynamics, \gls{cfd} (Computational Fluid Dynamics), \gls{dem} (Discrete Element Method), or cosmology \parencite{li2018postprocessing,lagares2022aquila,morrissey2020velassco,friesen2016insitu}.
 
 There are also computational gaps. Many proposed solutions assume tight access to the simulator internals or to specialized scientific formats and infrastructures. Fewer works address black-box simulators that already produce persisted outputs and still need an analyst-facing post-processing workflow. Likewise, the literature does not strongly emphasize the combination of distributed storage, batch-level metric extraction, user-defined aggregate functions, and Python-centric interaction as a unified architectural problem.
