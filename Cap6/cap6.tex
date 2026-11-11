@@ -1,0 +1,694 @@
+% ─────────────────────────────────────────────────────────────────────────────
+%  Chapter 6 — Experimental Evaluation
+%  Main benchmark: 10×parallel + 10×serial (all runs retained)
+%  Scalability benchmark: 5×N1 + 5×N2 + 5×N4
+%  All results fully populated — no placeholders remain.
+% ─────────────────────────────────────────────────────────────────────────────
+
+% TikZ styles for this chapter's flowcharts
+% (reuse lcXxx from cap5 where possible; add chapter-specific styles here)
+\tikzset{
+  evstep/.style={rectangle, rounded corners=3pt, draw=black!70, fill=blue!8,
+                 text width=5.5cm, minimum height=0.8cm, text centered,
+                 font=\small, inner sep=5pt},
+  evdec/.style={diamond, aspect=2.5, draw=black!70, fill=orange!15,
+                text width=2.8cm, minimum height=0.75cm, text centered,
+                font=\small, inner sep=2pt},
+  evio/.style={ellipse, draw=black!70, fill=green!20,
+               text width=2.8cm, minimum height=0.7cm,
+               text centered, font=\small, inner sep=3pt},
+  evloop/.style={rectangle, rounded corners=3pt, draw=black!60, fill=gray!8,
+                 text width=4.5cm, minimum height=0.75cm, text centered,
+                 font=\small, inner sep=5pt},
+  evarr/.style={thick,->,>=Stealth},
+  evline/.style={thick},
+}
+
+% ── Helper macros for placeholders (kept for future chapter extensions) ─────
+% \RESULT{mean}{std}{unit}  →  MEAN ± STD UNIT
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Overview}
+\label{sec:eval-overview}
+% ─────────────────────────────────────────────────────────────────────────────
+
+This chapter presents the experimental evaluation of the \gls{aerosouda} Remote cluster 
+prototype described in Chapter~5. The primary objective is to quantify the performance
+benefit of the distributed MapReduce pipeline over a single-executor baseline on the same
+Spark infrastructure for the representative production-scale simulation batch used in the
+study.
+
+The evaluation is structured as a controlled benchmarking study.  Section~6.1 defines the
+experimental setup: the input datasets, analysis scenarios, cluster configurations, and
+measurement protocol.  Section~6.2 introduces the performance metrics collected.  The results
+for each experimental condition are presented in Sections~6.3 and~6.4, followed by a
+discussion of speedup, overhead, and scalability in Section~6.5.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Experimental Setup}
+\label{sec:eval-setup}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Input Dataset}
+\label{subsec:eval-datasets}
+
+The benchmark uses two simulation batch \gls{csv} datasets:
+
+\begin{itemize}
+    \item Quick-Reaction dataset:
+          1\,888\,850 rows, approximately 1.3\,GB, involving 10 simulation runs.
+          This is the production batch generated from the Quick-Reaction scenario
+          described in Section~\ref{sec:cap2-sensitivity-analysis-sa}.
+    \item Launcher Longitude dataset:
+          2\,290\,288 rows, approximately 1.5\,GB, also involving 10 simulation runs.
+          This batch consists in varying the longitude of a \gls{gbad} missile launcher
+          across those 10 runs. This dataset's scenario works the same way as the
+          \gls{qr} scenario does, only changing the fighters for the \gls{gbad}
+          launcher as the opposing force.
+\end{itemize}
+
+\subsection{Analysis Scenarios}
+\label{subsec:eval-scenarios}
+
+Two \gls{yaml} scenario configurations are evaluated in this chapter:
+
+\begin{enumerate}
+    \item Quick-Reaction: computes the Pearson
+          correlation between the longitude of the red-side launcher and the survival time
+          (maximum frame number) of blue-side fighter entities.  This scenario uses
+          \texttt{scope: per\_entity} for the Y variable, producing one data point per
+          (entity, experiment) pair.
+    \item Launcher Longitude: computes the
+          Pearson correlation between the longitude of the red-side \gls{gbad} launcher and
+          the maximum damage sustained by blue-side fighter entities.  The
+          aggregation field (\texttt{state.damage}) requires deeper nested-dictionary
+          traversal than the frame-counting in Scenario~1.
+\end{enumerate}
+
+Both scenarios use \texttt{scope: per\_experiment} for the X variable and
+\texttt{scope: per\_entity} for the Y variable.  Consequently, one experiment-level X
+value can be paired with multiple entity-level Y observations (two blue fighters per
+run).  Pearson correlation remains well-defined for these observations, but rows from the
+same experiment are not strictly independent; results are therefore interpreted as an
+entity-level association measure conditioned on the experiment-level parameter setting.
+
+\subsection{Processing Modes: Serial and Parallel}
+\label{subsec:eval-modes}
+
+A central methodological question is how to define a serial baseline that is
+comparable to the parallel implementation without requiring a separate codebase.  This work
+adopts the following definition:
+
+\begin{itemize}
+    \item Serial mode (baseline): the distributed processor runs with a single
+          executor, single core, and single \gls{rdd} partition
+          (\texttt{executor.instances=1},
+          \texttt{executor.cores=1},
+          \texttt{--agg-partitions~1}).
+          The code path is identical to the parallel mode; only the resource
+          configuration differs.
+    \item Parallel mode (target): the processor uses four executors, with each
+          executor assigned two cores and the \gls{rdd} partitioned into 16
+          segments (default configuration).  Four executors execute map tasks concurrently.
+\end{itemize}
+
+This baseline definition ensures an apples-to-apples comparison: both modes use the same
+Spark infrastructure, the same code, and the same \gls{hdfs} storage layer.  The measured
+speedup therefore reflects the benefit of task-level parallelism within the
+\gls{aerosouda} architecture, including all fixed costs (\gls{jvm} startup, \gls{hdfs} read, output serialisation).
+
+Using a single Spark executor as the serial baseline also avoids conflating the inherent
+overhead of the Spark framework with the overhead attributable to parallelism.  A comparison
+against a standalone Python pandas script while informative would introduce confounding
+factors such as different memory access patterns and the absence of Spark's partitioned
+data model.
+
+\subsection{Measurement Protocol}
+\label{subsec:eval-protocol}
+
+Each job execution follows the same protocol, illustrated in the Benchmark Workflow in
+Figure~\ref{fig:benchmark-flow}:
+
+\begin{enumerate}
+    \item The input \gls{csv} is uploaded to \gls{hdfs} before the timing window begins.
+    \item The Spark job is launched remotely via \gls{ssh} by the \texttt{tg-cluster}
+          benchmark harness, which executes \texttt{run\_csv\_processor.sh} (or
+          \texttt{run\_csv\_processor\_serial.sh}) inside the
+          \texttt{spark-master} container.
+    \item Two timestamps are recorded: $t_0$ (spark-submit invoked on the
+          remote host) and $t_1$ (job process exits on the remote host), giving
+          $T_{\text{job}} = t_1 - t_0$.  Additionally, the wall-clock time
+          from the local client perspective ($T_{\text{total}}$, including
+          \gls{ssh} round-trip overhead) is recorded.  The benchmark harness also
+          parses fine-grained phase timing markers emitted by the job
+          ($T_{\text{init}}$, $T_{\text{map}}$, $T_{\text{reduce}}$, $T_{\text{output}}$)
+          and records peak worker \gls{cpu} and memory via periodic \texttt{docker stats}
+          queries; the instrumentation is described in
+          Section~\ref{subsec:rm-phase-instrumentation}.
+    \item The process is repeated ten times per mode.
+          All ten runs per mode are retained for statistical analysis (see
+          Section~\ref{subsec:eval-warmup}).
+\end{enumerate}
+
+\begin{figure}[htbp]
+\centering
+\resizebox{0.75\textwidth}{!}{%
+\begin{tikzpicture}[x=1cm, y=1cm]
+
+\node[evio] (start) at (0, 0) {Start};
+
+\node[evstep] (setup) at (0,-1.5)
+    {Upload CSV to HDFS (one-time)};
+
+\node[evloop, text width=6cm] (formod) at (0,-3.0)
+    {for each mode in \{serial, parallel\}};
+
+\node[evloop, text width=6cm] (forrun) at (0,-4.5)
+    {for run = 1 \ldots 10};
+
+\node[evstep] (launch) at (0,-6.0)
+    {SSH: launch Spark job; record $t_0$};
+
+\node[evstep] (done) at (0,-7.5)
+    {Job exits; record $t_1$; compute $T_{\text{job}}, T_{\text{total}}$};
+
+\node[evstep] (record) at (0,-9.0)
+    {Append row to benchmark CSV};
+
+\node[evstep, fill=gray!15] (stats) at (0,-10.5)
+    {Compute mean \& std over all 10 runs};
+
+\node[evio] (end) at (0,-12.0) {End};
+
+\draw[evarr] (start)  -- (setup);
+\draw[evarr] (setup)  -- (formod);
+\draw[evarr] (formod) -- (forrun);
+\draw[evarr] (forrun) -- (launch);
+\draw[evarr] (launch) -- (done);
+\draw[evarr] (done)   -- (record);
+
+\draw[evline] (record.east) -- ++(2.5,0) -- ++(0,5.3) -- (forrun.east);
+\draw[evline] (stats.east)  -- ++(3.5,0) -- ++(0,8.8) -- (formod.east);
+
+\draw[evarr] (record.south) -- (stats.north);
+\draw[evarr] (stats)  -- (end);
+
+\end{tikzpicture}%
+}
+\caption[Benchmark measurement protocol.]{Benchmark measurement protocol.  The outer loop iterates over the two
+         processing modes; the inner loop repeats the job ten times per mode.
+         All ten runs per mode are retained after a post-hoc warmup check
+         (Section~\ref{subsec:eval-warmup}) found no discardable outlier.}
+\label{fig:benchmark-flow}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Performance Metrics}
+\label{sec:eval-metrics}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Core metrics are collected for each job execution:
+
+\begin{itemize}
+    \item Total job time ($T_{\text{job}}$, seconds): wall-clock time measured
+          on the remote host from the moment \texttt{spark-submit} is invoked until the
+          job process exits.  This metric captures the full end-to-end runtime including
+          Spark startup, \gls{hdfs} read, computation, reduce phase, and output write.
+
+    \item Total client time ($T_{\text{total}}$, seconds): wall-clock time as
+          seen by the local benchmark client, encompassing $T_{\text{job}}$ plus the
+          \gls{ssh} command round-trip overhead.  The difference
+          $\Delta_{\text{ssh}} = T_{\text{total}} - T_{\text{job}}$ reflects network
+          and shell invocation latency and is expected to be smal overall.
+
+    \item Throughput ($R = N_{\text{rows}} / T_{\text{job}}$, rows\,s$^{-1}$):
+          number of simulation rows processed per second.  Allows comparison across
+          datasets of different sizes.
+
+    \item Speedup ($S = \bar{T}_{\text{job}}^{\text{serial}} /
+          \bar{T}_{\text{job}}^{\text{parallel}}$, dimensionless): ratio of the mean
+          serial job time to the mean parallel job time.  The theoretical maximum speedup
+          with $N = 4$ executors under Amdahl's law~\parencite{amdahl1967} is
+          $S_{\max} = 1 / (f + (1-f)/N)$, where $f$ is the non-parallelisable fraction.
+
+    \item Parallel efficiency ($\eta = S / N$, dimensionless):
+          fraction of the theoretical linear speedup achieved in practice.
+\end{itemize}
+
+In addition to these core metrics, the benchmark harness records fine-grained phase
+timings emitted by the remote Spark job:
+\[
+T_{\text{init}},\; T_{\text{map}},\; T_{\text{reduce}},\; T_{\text{output}}.
+\]
+Given Spark's lazy execution model, \(T_{\text{map}}\) includes both \gls{hdfs} read
+I/O and distributed payload processing.  A residual term is also computed,
+\[
+T_{\text{other}} = T_{\text{job}} -
+\left(T_{\text{init}} + T_{\text{map}} + T_{\text{reduce}} + T_{\text{output}}\right),
+\]
+to capture fixed runtime costs not directly attributed to the mapped phases
+(for example, job orchestration and scheduler overhead).  Finally, peak worker
+\gls{cpu} and memory are sampled via \texttt{docker stats} throughout each run.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{JVM Warm-up Analysis}
+\label{subsec:eval-warmup}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Before computing summary statistics, a post-hoc outlier check was performed on
+the first run of each mode to test whether \gls{jvm} and \gls{jit} warm-up effects distort the
+initial measurements.  Warm-up would manifest as run~1 being noticeably slower than the
+remaining runs.
+
+Table~\ref{tab:warmup-check} compares the run-1 job time against the mean of runs~2--10
+for each mode.  For the parallel mode, run~1 (76.10\,s) is 0.77\,s above
+the subsequent mean (75.33\,s). For the serial mode, run~1 (213.30\,s) is actually
+faster by 2.25\,s than the subsequent mean (215.55\,s).
+
+\begin{table}[htbp]
+\centering
+\caption{\gls{jvm} warm-up check: run~1 vs.\ mean of runs~2--10.}
+\label{tab:warmup-check}
+\begin{tabular}{lcccc}
+\toprule
+Mode & Run~1 $T_{\text{job}}$ (s) & Mean runs 2--10 (s) \\
+\midrule
+Parallel & 76.10 & 75.33 \\
+Serial   & 213.30 & 215.55 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+No warm-up artefact is detected: neither run~1 is a statistical outlier,
+and the serial first run is directionally faster, not slower.
+Accordingly, all ten runs per mode are retained for computing summary statistics.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Results}
+\label{sec:eval-results}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Quick-Reaction Scenario}
+\label{subsec:eval-qr}
+
+Executed campaign.
+The benchmark was executed using the \texttt{tg-cluster} remote client
+(Chapter~5) connected via \gls{ssh} to the AeroSOuDA cluster.
+Input: \texttt{results\_quickreaction.csv} (1\,888\,850 rows, $\approx$1.3\,GB) with
+scenario \texttt{qr\_correlation.yaml} (Pearson correlation, Quick-Reaction Scenario).
+Two modes were measured: parallel (4 executors, default configuration) and
+serial (1 executor, 1 core, 1 partition as baseline).  Each mode was repeated
+ten times; all ten runs are used for statistics (see Section~\ref{subsec:eval-warmup}).
+
+Tables~\ref{tab:qr-serial-runs} and \ref{tab:qr-parallel-runs} list the per-run
+measurements.  Table~\ref{tab:qr-summary} summarises the aggregate statistics.
+
+\begin{table}[htbp]
+\centering
+\caption{Quick-Reaction, per-run timings (serial mode, 1 executor).}
+\label{tab:qr-serial-runs}
+\begin{tabular}{cccc}
+\toprule
+Run & $T_{\text{job}}$ (s) & $T_{\text{total}}$ (s) & $R$ (rows/s) \\
+\midrule
+1  & 213.30 & 213.66 &  8852.5 \\
+2  & 216.29 & 216.63 &  8730.3 \\
+3  & 216.80 & 217.15 &  8709.8 \\
+4  & 216.78 & 217.15 &  8710.6 \\
+5  & 214.26 & 214.67 &  8813.1 \\
+6  & 215.72 & 216.06 &  8752.4 \\
+7  & 215.78 & 216.12 &  8750.0 \\
+8  & 215.79 & 216.12 &  8749.9 \\
+9  & 213.78 & 214.16 &  8832.6 \\
+10 & 214.78 & 218.37 &  8792.1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Quick-Reaction, per-run timings (parallel mode, 4 executors).}
+\label{tab:qr-parallel-runs}
+\begin{tabular}{cccc}
+\toprule
+Run & $T_{\text{job}}$ (s) & $T_{\text{total}}$ (s) & $R$ (rows/s) \\
+\midrule
+1  & 76.10 & 76.48 & 24820.6 \\
+2  & 74.62 & 74.94 & 25312.9 \\
+3  & 76.10 & 76.44 & 24820.6 \\
+4  & 75.10 & 75.50 & 25151.1 \\
+5  & 75.60 & 75.95 & 24984.8 \\
+6  & 74.59 & 74.93 & 25323.1 \\
+7  & 75.60 & 75.94 & 24984.8 \\
+8  & 75.61 & 75.98 & 24981.5 \\
+9  & 75.61 & 75.94 & 24981.5 \\
+10 & 75.17 & 75.51 & 25128.3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Quick-Reaction, summary statistics (all 10 runs per mode).}
+\label{tab:qr-summary}
+\begin{tabular}{lcc}
+\toprule
+Metric & Serial (mean $\pm$ std) & Parallel (mean $\pm$ std) \\
+\midrule
+$T_{\text{job}}$ (s)    & $215.33 \pm 1.24$   & $75.41 \pm 0.53$    \\
+$T_{\text{total}}$ (s)  & $216.01 \pm 1.47$   & $75.76 \pm 0.54$    \\
+$\Delta_{\text{ssh}}$ (s) & $0.68 \pm 1.02$   & $0.35 \pm 0.03$     \\
+$R$ (rows\,s$^{-1}$)    & $8\,769 \pm 50$   & $25\,049 \pm 177$     \\
+\midrule
+\multicolumn{3}{l}{Derived metrics} \\
+Speedup $S$             & \multicolumn{2}{c}{$2.855$} \\
+Parallel efficiency $\eta$ & \multicolumn{2}{c}{$0.714$ (71.4\%)} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Launcher Longitude Scenario}
+\label{subsec:eval-ll}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Executed campaign.
+The Launcher Longitude benchmark was executed using the standard main-benchmark
+protocol: ten serial runs (1 executor) and ten parallel runs (4 executors).
+Input: \texttt{results\_gbad\_launcher\_longitude.csv} (2\,290\,288 rows, $\approx$1.5\,GB) with
+scenario \texttt{analyze\_fighter\_damage\_by\_launcher\_longitude.yaml} (Pearson correlation
+between \gls{gbad} launcher longitude and the damage taken by the fighter jets).
+Both modes were repeated ten times; all ten runs are used for statistics.
+
+Timing results.
+Tables~\ref{tab:ll-serial-runs} and \ref{tab:ll-parallel-runs} list the per-run
+measurements.  Table~\ref{tab:ll-summary} summarises the aggregate statistics.
+
+\begin{table}[htbp]
+\centering
+\caption{Launcher Longitude, per-run timings (serial mode, 1 executor).}
+\label{tab:ll-serial-runs}
+\begin{tabular}{cccc}
+\toprule
+Run & $T_{\text{job}}$ (s) & $T_{\text{total}}$ (s) & $R$ (rows/s) \\
+\midrule
+1  & 250.81 & 251.65 & 9\,132 \\
+2  & 252.81 & 253.58 & 9\,059 \\
+3  & 253.82 & 254.64 & 9\,023 \\
+4  & 251.81 & 252.65 & 9\,095 \\
+5  & 250.30 & 251.08 & 9\,150 \\
+6  & 252.26 & 253.08 & 9\,079 \\
+7  & 252.83 & 253.69 & 9\,059 \\
+8  & 252.29 & 253.09 & 9\,078 \\
+9  & 250.23 & 251.05 & 9\,153 \\
+10 & 253.24 & 254.13 & 9\,044 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Launcher Longitude, per-run timings (parallel mode, 4 executors).}
+\label{tab:ll-parallel-runs}
+\begin{tabular}{cccc}
+\toprule
+Run & $T_{\text{job}}$ (s) & $T_{\text{total}}$ (s) & $R$ (rows/s) \\
+\midrule
+1  & 81.61 & 82.45 & 28\,064 \\
+2  & 79.60 & 80.47 & 28\,772 \\
+3  & 80.11 & 80.92 & 28\,589 \\
+4  & 79.59 & 80.42 & 28\,776 \\
+5  & 80.10 & 81.01 & 28\,593 \\
+6  & 79.61 & 80.44 & 28\,769 \\
+7  & 81.11 & 80.96 & 28\,237 \\
+8  & 80.11 & 80.96 & 28\,589 \\
+9  & 79.61 & 80.47 & 28\,769 \\
+10 & 80.11 & 80.91 & 28\,589 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Launcher Longitude, summary statistics (all 10 runs per mode).}
+\label{tab:ll-summary}
+\begin{tabular}{lcc}
+\toprule
+Metric & Serial (mean $\pm$ std) & Parallel (mean $\pm$ std) \\
+\midrule
+$T_{\text{job}}$ (s)      & $252.04 \pm 1.24$   & $80.16 \pm 0.69$    \\
+$T_{\text{total}}$ (s)    & $252.86 \pm 1.21$   & $80.90 \pm 0.57$    \\
+$\Delta_{\text{ssh}}$ (s) & $0.82 \pm 0.04$     & $0.75 \pm 0.32$     \\
+$R$ (rows\,s$^{-1}$)      & $9\,087 \pm 42$     & $28\,573 \pm 243$   \\
+\midrule
+\multicolumn{3}{l}{Derived metrics} \\
+Speedup $S$                & \multicolumn{2}{c}{$3.144$} \\
+Parallel efficiency $\eta$ & \multicolumn{2}{c}{$0.786$ (78.6\%)} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The Launcher Longitude scenario processes a larger dataset than Quick-Reaction
+(2.29M vs 1.89M rows) and achieves a higher speedup ($3.144$ vs $2.855$) and
+parallel efficiency ($78.6\%$ vs $71.4\%$).  This is consistent with Amdahl-type
+behaviour: a larger parallelisable workload reduces the relative weight of the
+non-parallelisable serial component (Spark session startup, driver initialisation, output
+serialisation), thereby yielding a higher observed speedup.
+Section~\ref{sec:eval-scalability} characterises this behaviour in detail using a
+scalability experiment over the same input file.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Discussion}
+\label{sec:eval-discussion}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Speedup Analysis}
+\label{subsec:eval-speedup}
+
+Table~\ref{tab:speedup-comparison} summarises the speedup and efficiency achieved by
+each campaign.
+
+\begin{table}[htbp]
+\centering
+\caption{Speedup and efficiency comparison across the two benchmark campaigns.}
+\label{tab:speedup-comparison}
+\begin{tabular}{lcccc}
+\toprule
+Campaign & Dataset rows & $\bar{T}_{\text{serial}}$ (s) &
+$S$ & $\eta$ \\
+\midrule
+Quick-Reaction   & 1\,888\,850 & 215.33 & 2.855 & 71.4\% \\
+Launcher Longitude & 2\,290\,288 & 252.04 & 3.144 & 78.6\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Both campaigns achieve meaningful parallel acceleration on a single-host Docker
+deployment.  The higher speedup and efficiency of the Launcher Longitude campaign
+($S=3.144$, $\eta=78.6\%$) relative to Quick-Reaction ($S=2.855$, $\eta=71.4\%$)
+is consistent with the larger input volume: the additional $\approx400\,000$ rows
+increase the parallelisable fraction of the job, reducing the relative overhead of
+the fixed serial components and allowing the four executors to deliver a higher net
+acceleration.  The key take-away is that the \gls{aerosouda} distributed pipeline
+reduces wall-clock time by $65$--$75\%$ relative to the single-executor baseline,
+independently of which analytical scenario or dataset is used.
+
+\subsection{Amdahl's Law and Overhead Analysis}
+\label{subsec:eval-amdahl}
+
+Amdahl's law~\parencite{amdahl1967} predicts that for a programme with non-parallelisable
+fraction $f$, the speedup with $N$ executors is
+$S(N)=1/(f+(1-f)/N)$.
+
+In this work, \(f\) is estimated empirically from the Launcher Longitude
+scalability timings (Section~\ref{sec:eval-scalability}) by fitting \(T(N)=T_s+T_p/N\),
+where \(T_s\) is the serial component and \(T_p\) is the parallelisable component.
+Using \(N\in\{1,2,4\}\), the fit yields \(\hat{f}=T_s/(T_s+T_p)\approx0.077\), which
+corresponds to \(S_{\max}(2)\approx1.857\) and \(S_{\max}(4)\approx3.247\).  These values
+are close to the measured speedups (\(1.867\) and \(3.232\), respectively), confirming
+that the observed scaling is well-described by Amdahl-type behaviour under shared-host
+contention.
+
+\subsection{Throughput Scaling}
+\label{subsec:eval-throughput}
+
+Table~\ref{tab:throughput-summary} summarises throughput for both campaigns.  For
+Quick-Reaction, throughput increased from $8\,769 \pm 50$\,rows/s to
+$25\,049 \pm 177$\,rows/s, a factor of $2.86\times$.  For Launcher Longitude, it
+increased from $9\,087 \pm 42$\,rows/s to $28\,573 \pm 243$\,rows/s, a factor of
+$3.14\times$, matching the respective speedup values.
+
+\begin{table}[htbp]
+\centering
+\caption{Throughput comparison across both benchmark campaigns (all 10 runs per mode).}
+\label{tab:throughput-summary}
+\begin{tabular}{llccc}
+\toprule
+Campaign & Mode & Mean (rows/s) & Std (rows/s) \\
+\midrule
+Quick-Reaction   & Serial   & 8\,769  & 50  \\
+                 & Parallel & 25\,049 & 177 \\
+\addlinespace
+Launcher Longitude & Serial   & 9\,087  & 42  \\
+                   & Parallel & 28\,573 & 243 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{SSH Communication Overhead}
+\label{subsec:eval-ssh}
+
+The difference $\Delta_{\text{ssh}} = T_{\text{total}} - T_{\text{job}}$ captures the
+round-trip cost of the \gls{ssh} command dispatch used by the \texttt{tg-cluster} client.
+For the Quick-Reaction parallel mode, the mean overhead is $0.35 \pm 0.03$\,s  
+less than $0.5\%$ of total job time.  For the Launcher Longitude parallel mode, the mean
+overhead is $0.75 \pm 0.32$\,s, less than $1\%$ of total job time.  In both cases,
+\gls{ssh} dispatch adds negligible latency for the distributed execution model.
+
+\subsection{Threats to Validity}
+\label{subsec:eval-threats}
+
+A couple of factors limit the generalisability of these results:
+
+\begin{itemize}
+    \item Single-host deployment.  All containers (master, four workers,
+          namenode, datanodes, history server) ran on the same physical machine.
+          The \gls{hdfs} data-locality benefit, a primary architectural advantage  
+          cannot be realised in this configuration.  On a genuine multi-node cluster,
+          network-aware data placement would reduce inter-node I/O and is expected to
+          improve speedup further.
+    \item Shared system resources.  Worker containers compete for the same
+          physical CPU cores, memory, and disk I/O, introducing contention that would
+          not exist on dedicated hardware and limits efficiency at higher executor counts.
+          The phase-timing instrumentation described in
+          Section~\ref{subsec:rm-phase-instrumentation} enables future benchmark runs to
+          quantify each phase's contribution to $T_{\text{job}}$ and to correlate
+          worker \gls{cpu} saturation (measured via \texttt{docker stats}) with the
+          observed efficiency drop from $\eta=93.4\%$ at $N=2$ to $\eta=80.8\%$ at $N=4$,
+          providing an empirical basis for the shared-resource hypothesis.
+    \item Dataset coverage.  Two datasets were evaluated: the Quick-Reaction
+          batch (1.3\,GB, 1.89M rows) and the Launcher Longitude batch (1.5\,GB, 2.29M
+          rows), both consisting in only 10 simulations due to input gathering limitations.
+          Additional campaigns with broader data volumes and different entity schemas would
+          strongly help generalizing those results.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Scalability Analysis}
+\label{sec:eval-scalability}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Motivation}
+\label{subsec:eval-scalability-motivation}
+
+The main benchmark of Section~\ref{sec:eval-results} provides two data points on
+the speedup curve: N=1 (serial baseline) and N=4 (parallel mode).  A single pair of
+points is sufficient to claim that parallelism is beneficial, but it does not reveal
+whether the system scales efficiently as the number of executors grows.  This section
+closes that gap by running the Launcher Longitude full-dataset campaign with N=1, 2, and 4
+executors and comparing the resulting speedup curve against the Amdahl's law prediction.
+
+\subsection{Experimental Setup}
+\label{subsec:eval-scalability-setup}
+
+The scalability experiment uses the Launcher Longitude input file
+(\texttt{results\_gbad\_launcher\_longitude.csv}, \texttt{analyze\_fighter\_damage\_by\_launcher\_longitude.yaml}).
+Three executor configurations are evaluated:
+
+\begin{itemize}
+    \item N=1: 1 executor, 1 core, 1 partition.
+    \item N=2: 2 executors, 2 cores maximum.
+    \item N=4: 4 executors, 4 cores maximum.
+\end{itemize}
+
+Each configuration is executed with the \texttt{tg-cluster} benchmark harness using
+the \texttt{--mode scalability} flag:
+
+\begin{verbatim}
+python benchmark.py --runs 5 --mode scalability \
+    --csv results_gbad_launcher_longitude.csv --no-download
+\end{verbatim}
+
+Five runs per configuration are used.  One run at N=2 produced an execution time of
+$882.65$\,s, an outlier attributable to a transient cluster scheduling hiccup  
+and was excluded; the remaining four N=2 runs were used for statistics.
+
+\subsection{Theoretical Prediction}
+\label{subsec:eval-scalability-theory}
+
+Using the fitted non-parallelisable fraction $\hat{f} \approx 0.077$ estimated from the
+scalability timings (Section~\ref{subsec:eval-amdahl}), Amdahl's law predicts:
+\[
+S_{\max}(N) = \frac{1}{\hat{f} + (1-\hat{f})/N}
+\approx \frac{1}{0.077 + 0.923/N}.
+\]
+
+\begin{table}[htbp]
+\centering
+\caption{Amdahl's law predictions vs.\ measured speedup for the scalability experiment
+         (Launcher Longitude dataset).}
+\label{tab:scalability-amdahl}
+\begin{tabular}{cccc}
+\toprule
+N & $S_{\max}$ (Amdahl) & $S$ (measured) & $\eta$ (measured) \\
+\midrule
+1 & 1.000 & 1.000 & — \\
+2 & 1.857 & 1.867 & 93.4\% \\
+4 & 3.247 & 3.232 & 80.8\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Results}
+\label{subsec:eval-scalability-results}
+
+\begin{table}[htbp]
+\centering
+\caption{Scalability experiment, mean $T_{\text{job}}$ and speedup by executor count
+         (5 runs per configuration, Launcher Longitude dataset).}
+\label{tab:scalability-results}
+\begin{tabular}{ccccc}
+\toprule
+N & $\bar{T}_{\text{job}}$ (s) & $\sigma$ (s) & Speedup $S$ & Efficiency $\eta$ \\
+\midrule
+1 & 260.55 & 4.39 & 1.000 & — \\
+2 & 139.55 & 0.75 & 1.867 & 93.4\% \\
+4 & 80.61  & 0.87 & 3.232 & 80.8\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent The N=4 result is consistent with the 10-run main benchmark
+(Table~\ref{tab:ll-summary}), confirming measurement stability across independent
+sessions.  The N=1 mean ($260.55$\,s) is slightly higher than the main benchmark
+serial mean ($252.04$\,s), which is expected as the scalability campaign ran under
+different system-load conditions.
+
+\subsection{Discussion}
+\label{subsec:eval-scalability-discussion}
+
+The results in Table~\ref{tab:scalability-amdahl} exhibit a clear and expected trend:
+speedup increases with $N$ but at a diminishing rate, consistent with Amdahl's law.
+Two observations are particularly relevant for this thesis.
+
+High efficiency at N=2.
+With two executors, the system achieves $S = 1.867$ and $\eta = 93.4\%$, very close to
+the fitted Amdahl prediction ($S_{\max}(2)=1.857$).  At this scale, the shared-host
+deployment introduces limited contention and the job is nearly perfectly parallel.
+
+Efficiency drop from N=2 to N=4.
+The efficiency falls from $93.4\%$ to $80.8\%$ as the executor count doubles.  This
+degradation is consistent with shared-host contention: all four worker containers
+compete for the same physical cores, memory bus, and disk I/O.  Even so, quadrupling
+the executor count reduces wall-clock time by a factor of $3.23\times$, achieving the
+highest speedup measured in this thesis.
+
+Cross-dataset consistency.
+The Quick-Reaction campaign (Section~\ref{subsec:eval-qr}) uses a smaller dataset
+(1.89M rows) and shows a measured speedup of $2.855$ at N=4 with $71.4\%$ efficiency.
+The Launcher Longitude campaign uses a larger dataset (2.29M rows) and achieves
+$3.144$ at N=4 from the main benchmark and $3.232$ from the scalability experiment.
+The increase in speedup with dataset size is consistent with Amdahl's law: a larger
+parallelisable workload reduces the relative serial overhead fraction, raising the
+efficiency ceiling.  Taken together, the two campaigns confirm that the distributed
+pipeline scales beneficially across different input volumes and analytical configurations.

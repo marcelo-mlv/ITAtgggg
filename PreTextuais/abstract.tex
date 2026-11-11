@@ -1,1 +1,33 @@
-Well, the book is on the table. This work presents a control methodologie for the position of the  passive joints of an underactuated manipulator in a suboptimal way. The term underactuated refers to the fact that not all the joints or degrees of freedom of the system are equipped with actuators, which occurs in practice due to failures or as design result. The passive joints of manipulators like this are indirectly controlled by the motion of the active joints using the dynamic coupling characteristics. The utilization of actuation redundancy of the active joints allows the minimization of some criteria, like energy consumption, for example. Although the kinematic structure of an underactuated manipulator is identical to that of a similar fully actuated one, in general their dynamic characteristics are different due to the presence of passive joints. Thus, we present the dynamic modelling of an underactuated manipulator and the concept of coulpling index. This index is used in the sequence of the optimal control of the manipulator.
+Large-scale aerospace simulation environments generate substantial volumes of raw data
+whose post-processing represents a critical bottleneck in analytical workflows. When
+simulation batches are processed sequentially on a single machine, the time required to
+derive meaningful metrics and aggregate values grows proportionally to the number of
+executions, limiting the analytical agility required for Capability-Based Planning in
+defense contexts.
+
+This work proposes, implements, and evaluates a distributed computing infrastructure designed
+to accelerate the post-processing stage of scenario-based aerospace simulations produced by
+the ASA project, developed at the Institute for Advanced Studies of the Brazilian Air Force.
+The project, titled AeroSOuDA, combines Apache Spark (via PySpark) for parallel metric
+extraction with the Hadoop Distributed File System (HDFS) for scalable storage with data
+locality, exposing an interactive command-line interface through which analysts define metric
+and aggregation functions before submitting the job, without requiring advanced computational
+knowledge.
+
+Two deployment modes are presented: a local cluster via Docker Compose for prototyping,
+and a remote virtual machine deployment accessed by a Python client over SSH and SFTP. The
+experimental evaluation in two analytical scenarios over two independent datasets (1,3\,GB
+and 1,5\,GB, respectively) demonstrates speedups of $2{,}86\times$ and $3{,}14\times$ with
+four executors in a single-host cluster, corresponding to parallel efficiencies of
+$71{,}4\%$ and $78{,}6\%$. A scalability experiment with one, two, and four executors on
+the larger dataset confirms that the architecture scales beneficially, reaching $93{,}4\%$
+of efficiency with two executors. The SSH communication overhead remains below $1\%$ of the
+total execution time in both campaigns, confirming the feasibility of the remote deployment
+model.
+
+The results establish that the MapReduce paradigm, implemented via PySpark and HDFS,
+provides a practical and scalable foundation for the distributed post-processing of
+simulation batches in an aerospace defense context, reducing execution time by $65$--$68\%$
+relative to the sequential baseline while keeping the raw dataset entirely on the server.
+The measured speedup increases with the size of the dataset, consistent with the predictions
+of Amdahl's Law derived from the scalability experiment.

@@ -1,12 +1,14 @@
 In this chapter, we present the technical background needed to understand the proposed distributed computing architecture and position it within the existing literature.
 
 \section{The ASA Project}
+\label{sec:cap2-the-asa-project}
 
 \gls{asa} is a software ecosystem created for the modeling and simulation of military operational scenarios to support the development of tactics and procedures in the aerospace context for the Brazilian Air Force \parencite{dantas2025asa}. It supports scenario modeling and both simulation execution and output analysis via a custom python library named Asapy \parencite{dantas2024asapy}, providing the Brazilian Air Force's higher command with quantitative and statistically robust analyses of outcomes of aerospace defense scenarios. The architectural solution addressed in this thesis concerns a specific bottleneck: while \gls{asa} excels at scenario execution, post-processing of large result volumes becomes inefficient when handled serially on a single machine. If the analyst must manually retrieve, structure, and aggregate raw results after each batch, the overall workflow becomes slower and less scalable.
 
 The core contribution of this work is to improve simulation outputs are transformed into analytical products through distributed post-processing, without requiring changes to the core simulation logic. 
 
 \section{Capacity-Based Planning (CBP)}
+\label{sec:cap2-capacity-based-planning-cbp}
 
 \gls{cbp} is a defense-planning approach centered on the capabilities required to accomplish missions under multiple plausible scenarios, rather than on a single predefined threat. In this perspective, the planning process asks which operational effects must be achieved and which combinations of systems, doctrine, personnel, and infrastructure are needed to achieve them robustly across different future situations. As discussed by \textcite{davis2002cbp}, \gls{cbp} is particularly useful when uncertainty is high and when strategic decisions must remain valid under changing technological, political, and operational conditions.
 
@@ -18,6 +20,7 @@ In an air-defense context, \gls{cbp} helps transform broad strategic concerns in
 Air-defense planning therefore benefits from analytical environments in which multiple scenarios can be generated, executed, and compared in a structured manner. This is especially important when force design decisions must balance offensive and defensive investments, doctrinal alternatives, and constrained resources. In such cases, \gls{cbp} works as a bridge between high-level strategic questions and operationally grounded evaluations \parencite{davis2002cbp,hodicky2020cbp}.
 
 \section{Modeling and Simulation (M\&S)}
+\label{sec:cap2-modeling-and-simulation-m-and-s}
 
 \gls{ms} refers to the combined use of mathematical and computational representations to abstract real-world systems and replicate their behavior under controlled conditions. A model encodes the essential elements, relationships, and rules that govern a system's dynamics, while a simulation executes that model to generate outcomes over time. \gls{ms} has become a fundamental tool across engineering, operations research, and defense, enabling the study of complex systems that are too costly, dangerous, or time-consuming to experiment with directly. By abstracting reality into a computable form, \gls{ms} allows analysts to pose hypothetical questions, observe consequences, and reason about system behavior before implementing decisions in the real world.
 
@@ -26,6 +29,7 @@ In the context of operational planning and defense analysis, \gls{ms} serves as 
 Defense-oriented simulation has long been used for analysis, research and development, test and evaluation, and training, precisely because it allows complex systems to be studied before costly real-world decisions are made \parencite{hodson2014lvc}. For decision support, the value of \gls{ms} lies not only in reproducing an environment, but in enabling structured experimentation. Different strategies, force compositions, parameter ranges, and environmental assumptions can be explored through repeated runs, and the resulting data can be transformed into metrics that support comparison.
 
 \section{Sensitivity Analysis (SA)}
+\label{sec:cap2-sensitivity-analysis-sa}
 
 One of the most important kinds of simulation in this context is \gls{sa}. In broad terms, it is a specific kind of simulation that studies how variations in one or more input parameters (called sweep parameters) influence the output of a model. In decision-analysis literature, it is used to evaluate robustness, expose influential parameters, and identify how stable conclusions remain under changing assumptions \parencite{wieckowski2023sensitivity}. In scenario-based simulation, the same logic applies: the analyst varies a parameter across a batch of runs and observes how the resulting outputs respond, enabling them to evaluate a correlation between two parameters.
 
@@ -49,22 +53,23 @@ This type of scenario is representative of the analytical use case targeted by \
 In the workflow considered in this thesis, it is useful to distinguish three levels of analytical output:
 
 \begin{itemize}
-    \item A \textit{result} is the raw data produced by an individual simulation run;
-    \item A \textit{metric} is a useful quantity derived from a single simulation result;
-    \item An \textit{aggregate value} is obtained by combining metrics from all runs in a simulation batch.
+    \item A result is the raw data produced by an individual simulation run;
+    \item A metric is a useful quantity derived from a single simulation result;
+    \item An aggregate value is obtained by combining metrics from all runs in a simulation batch.
 \end{itemize}
 
-Also, an \textit{aggregate function} may be defined as the function used to obtain the aggregate value from each metric.
+Also, an aggregate function may be defined as the function used to obtain the aggregate value from each metric.
 
-In the example provided above \gls{qr} scenario, if we run a simulation batch varying radar longitude in order to evaluate its correlation to the survival time of blue jets:
+In the \gls{qr} scenario example, if a simulation batch varying radar longitude is run in order to evaluate its correlation to the survival time of blue jets:
 
 \begin{itemize}
-    \item A \textit{result} may include, for each frame, whether a fighter remains alive, when radar detection occurred, or when a combat event happened;
-    \item A \textit{metric} may represent the blue fighter jets' survival time;
-    \item An \textit{aggregate value} may be the correlation (numerical result) or even a scatterplot between said survival time and the red team radar's longitude (visual result).
+    \item A result may include, for each frame, whether a fighter remains alive, when radar detection occurred, or when a combat event happened;
+    \item A metric may represent the blue fighter jets' survival time;
+    \item An aggregate value may be the correlation (numerical result) or even a scatterplot between said survival time and the red team radar's longitude (visual result).
 \end{itemize}
 
 \section{Distributed Computing}
+\label{sec:cap2-distributed-computing}
 
 Distributed Computing is the field of computer science concerned with the execution of computations across multiple interconnected computing nodes that cooperate to solve a common problem. Instead of concentrating processing, memory, and storage resources in a single machine, distributed computing systems partition workloads among several autonomous nodes that communicate through a network and coordinate their actions through message exchange.
 
@@ -73,35 +78,37 @@ A widely adopted definition characterizes a distributed system as a collection o
 The main motivations for adopting distributed computing include scalability, fault tolerance, resource sharing, and performance improvement. By distributing data and computation across multiple machines, systems can process larger workloads than would be feasible on a single computer while also reducing the impact of individual node failures. These characteristics have made distributed computing a foundational paradigm for modern large-scale infrastructures, including cloud computing platforms, distributed file systems, big data processing frameworks, and high-performance computing environments.
 
 \subsection{Distribution Viability in a Simulation Workflow}
+\label{subsec:cap2-distribution-viability-in-a-simulation-workflow}
 
 In simulation-related research, distributed computing appears both during simulation execution and during post-processing stages. Simulation workloads can be partitioned across multiple processors or machines to reduce execution time, while large volumes of generated data can be analyzed using distributed frameworks that exploit parallelism and data locality.
 
-In this work, distributed computing is not used to accelerate the simulator itself, but rather to accelerate the analytical processing of the simulator's outputs. The former corresponds to the \textit{Execution Stage}, in which simulations are launched and executed. The latter corresponds to the \textit{Analysis and Aggregation Stage}, in which simulation outputs are processed into metrics and batch-level results.
+In this work, distributed computing is not used to accelerate the simulator itself, but rather to accelerate the analytical processing of the simulator's outputs. The former corresponds to the Execution Stage, in which simulations are launched and executed. The latter corresponds to the Analysis and Aggregation Stage, in which simulation outputs are processed into metrics and batch-level results.
 
 This distinction is important because the proposed workload is naturally decomposable. A simulation batch consists of many individual runs, and each run generates raw outputs that can first be processed independently to derive metrics and then combined to obtain a batch-level aggregate value. Such a decomposition is structurally compatible with distributed data-processing strategies.
 
 \begin{figure}[ht]
     \centering
     \includegraphics[width=0.82\textwidth]{Cap2/ms-general-pipeline.png}
-    \caption{General Pipeline for \gls{ms}, showing both stages: \textit{Execution Stage} and \textit{Analysis and Aggregation Stage}.}
+    \caption{General Pipeline for \gls{ms}, showing both stages: Execution Stage and Analysis and Aggregation Stage.}
     \label{fig:ms-general-pipeline}
 \end{figure}
 
 In the \gls{qr} scenario, considering the metrics are implicit inside \gls{aa} stage in Figure~\ref{fig:ms-general-pipeline}:
 
 \begin{itemize}
-    \item The \textit{Scenario} box represents the \gls{qr} Scenario;
-    \item Each \textit{Simulation} box represents a different simulation instance;
-    \item The \textit{aggregate value} box represents the aggregate value after combining all metrics.
+    \item The Scenario box represents the \gls{qr} Scenario;
+    \item Each Simulation box represents a different simulation instance;
+    \item The aggregate value box represents the aggregate value after combining all metrics.
 \end{itemize}
 
 Regarding Figure~\ref{fig:ms-general-pipeline} still, although distributed computing can be useful in both stages highlighted in red, this work focuses specifically on the \gls{aa} stage.
 
-This choice is justified by the fact that, historically, the scientific efforts of the high-performance computing community have overwhelmingly focused on optimizing the physical execution time and synchronization of simulation engines (\textit{Execution Stage}) \parencite{fujimoto2016pds}. However, with the exponential growth of data volumes generated by large-scale simulations, the true computational and infrastructural bottleneck has shifted to the subsequent post-processing and metric extraction phases \parencite{valduriez2018scidisc, zheng2021metadata}. Consequently, while the parallel execution of scenarios has reached a high level of maturity, distributed mechanisms tailored for consolidating batch-level analytical results (\textit{Analysis and Aggregation Stage}) still lack standardized approaches, presenting a critical gap in the efficiency of modern scientific workflows.
+This choice is justified by the fact that, historically, the scientific efforts of the high-performance computing community have overwhelmingly focused on optimizing the physical execution time and synchronization of simulation engines (Execution Stage) \parencite{fujimoto2016pds}. However, with the exponential growth of data volumes generated by large-scale simulations, the true computational and infrastructural bottleneck has shifted to the subsequent post-processing and metric extraction phases \parencite{valduriez2018scidisc, zheng2021metadata}. Consequently, while the parallel execution of scenarios has reached a high level of maturity, distributed mechanisms tailored for consolidating batch-level analytical results (Analysis and Aggregation Stage) still lack standardized approaches, presenting a critical gap in the efficiency of modern scientific workflows.
 
 \subsection{MapReduce}
+\label{subsec:cap2-mapreduce}
 
-MapReduce is a distributed programming model that decomposes a computation into two main phases: a \textit{map} phase, in which input records are transformed into intermediate key-value pairs, and a \textit{reduce} phase, in which values associated with the same key are aggregated \parencite{dean2004mapreduce}. Its importance goes beyond one implementation technology: MapReduce offers a conceptual model for thinking about large-scale batch processing over partitioned datasets.
+MapReduce is a distributed programming model that decomposes a computation into two main phases: a map phase, in which input records are transformed into intermediate key-value pairs, and a reduce phase, in which values associated with the same key are aggregated \parencite{dean2004mapreduce}. Its importance goes beyond one implementation technology: MapReduce offers a conceptual model for thinking about large-scale batch processing over partitioned datasets.
 
 \begin{figure}[ht]
     \centering
@@ -110,9 +117,9 @@ MapReduce is a distributed programming model that decomposes a computation into 
     \label{fig:mapreduce-overview}
 \end{figure}
 
-Figure~\ref{fig:mapreduce-overview} illustrates this model. The computation begins with the \textit{problem data}, representing the input dataset to be processed. A central \textit{master node} receives the job and is responsible for coordinating the execution. During the \textit{map} phase, the master partitions the input data into smaller independent tasks and distributes them among multiple \textit{worker nodes}. Each worker processes its assigned partition in parallel and produces intermediate results. The red arrows in the figure represent the distribution of work from the master to the workers.
+Figure~\ref{fig:mapreduce-overview} illustrates this model. The computation begins with the problem data, representing the input dataset to be processed. A central master node receives the job and is responsible for coordinating the execution. During the map phase, the master partitions the input data into smaller independent tasks and distributes them among multiple worker nodes. Each worker processes its assigned partition in parallel and produces intermediate results. The red arrows in the figure represent the distribution of work from the master to the workers.
 
-Once the mapping tasks have been completed, the intermediate results are returned to the master, as indicated by the blue arrows. During the \textit{reduce} phase, the master combines, aggregates, or summarizes the partial outputs generated by the workers. Depending on the application, this aggregation may involve operations such as summation, counting, averaging, merging data structures, or computing statistical metrics. The final aggregate value is then written to the \textit{solution data}, which represents the output dataset produced by the computation.
+Once the mapping tasks have been completed, the intermediate results are returned to the master, as indicated by the blue arrows. During the reduce phase, the master combines, aggregates, or summarizes the partial outputs generated by the workers. Depending on the application, this aggregation may involve operations such as summation, counting, averaging, merging data structures, or computing statistical metrics. The final aggregate value is then written to the solution data, which represents the output dataset produced by the computation.
 
 Although practical MapReduce implementations often include additional stages such as shuffling, sorting, fault tolerance, and data locality optimization, the fundamental idea remains the same: a master node coordinates a collection of workers that independently process partitions of the input data and subsequently contribute their partial results to a reduction step that generates the final solution. This model enables scalable processing by exploiting parallelism while presenting a relatively simple programming abstraction to the developer.
 
@@ -121,6 +128,7 @@ That conceptual model maps naturally to the problem studied in this thesis. Each
 At the same time, the literature also shows the limits of a purely MapReduce-oriented approach for richer multi-stage analytics. When workflows involve repeated transformations, structured queries, or multiple dependent operations over the same data, models based on richer execution graphs may offer better flexibility and lower overhead \parencite{zaharia2012rdd}. However, these limitations don't pose as a critical problem in our case, since both map and reduce stages can be well translated in our work's analytical pipeline.
 
 \subsection{Apache Spark}
+\label{subsec:cap2-apache-spark}
 
 Apache Spark is an open-source distributed computing framework designed for large-scale data processing. Unlike the traditional MapReduce model, which relies on multiple disk-based stages, Spark performs most computations in memory, significantly improving performance for iterative algorithms, interactive analysis, and complex data processing pipelines \parencite{zaharia2012rdd,sparkpysparkdocs}.
 
@@ -128,13 +136,71 @@ Spark organizes computation through a cluster architecture composed of a driver 
 
 A key advantage of Spark in scientific computing environments is its integration with distributed storage systems such as \gls{hdfs}. By executing computations close to where data are stored, Spark reduces network transfer overhead and enables efficient processing of datasets that exceed the memory and storage capacity of a single machine. These characteristics have motivated its adoption in high-performance computing and large-scale simulation post-processing workflows \parencite{li2018postprocessing}.
 
+\subsubsection{Executors, cores, and partitions}
+\label{subsubsec:cap2-executors-cores-and-partitions}
+
+In Spark, an executor is a long-lived worker process responsible for executing tasks and storing intermediate data for a running application. The driver creates tasks from the job plan and sends them to executors, which process data partitions and return partial results. The number of executors defines how many worker processes are available in parallel, while the number of cores per executor defines how many tasks each executor can run concurrently \parencite{sparkpysparkdocs}.
+
+A Spark job is the unit of execution created when an action is triggered, for example \texttt{count()}, \texttt{collect()}, or a write operation. Internally, a job is split into one or more stages, and each stage is split into tasks that run on data partitions. In practical terms, this means that a single analytical script can launch multiple jobs, and each job consumes the available executor cores according to its stage and partition structure.
+
+\gls{rdd} partitioning controls how the input dataset is divided into independent work units. In practice, each partition is processed by one task, and tasks are scheduled over the available executor cores. As a result, parallel throughput depends on the joint configuration of executors, cores, and partitions. Increasing only one of these parameters does not necessarily improve performance if the others remain constrained.
+
+\subsubsection{Execution model and the Java Virtual Machine}
+\label{subsubsec:cap2-execution-model-and-the-java-virtual-machine}
+
+The execution engine behind Spark is not implemented as a standalone Python runtime. The core of Spark is written in Scala and runs on the \gls{jvm}, which provides memory management, thread scheduling, object allocation, and garbage collection for the driver and executor processes \parencite{oraclejvm2024}. This design matters because Spark's in-memory execution model depends on efficient heap usage and low-latency task scheduling. The driver coordinates distributed execution, while the executors are long-lived \gls{jvm} processes that receive partitions, execute transformations, and return partial results to the driver. In practice, this means that the apparent simplicity of a Python interface hides a more elaborate runtime: PySpark communicates with the JVM-based Spark engine through a local gateway and serializes data between Python objects and \gls{jvm} data structures \parencite{sparkpysparkdocs,oraclejvm2024}. Without understanding this runtime boundary, many Spark performance and memory issues appear mysterious, even when the user's code is written in Python.
+
+This perspective is particularly relevant for large-scale simulation post-processing. A batch may contain millions of rows, and a single executor may not be able to hold all intermediate state in memory. Because the executor processes are JVM-backed, the effective capacity of the cluster is determined not only by the number of cores, but also by the configured heap size, the task parallelism, and the data partitioning strategy. In this sense, the \gls{jvm} is not an implementation detail; it is part of the distributed execution model that determines how work is scheduled and how memory pressure is handled under load \parencite{zaharia2012rdd, apachejvm2024}.
+
+\subsubsection{Resilient Distributed Datasets}
+\label{subsubsec:cap2-resilient-distributed-datasets}
+
+The most important abstraction in Spark is the Resilient Distributed Dataset (RDD) \parencite{zaharia2012rdd}. An RDD is a collection of data partitions that can be processed in parallel across the cluster while retaining a lineage graph that records how the dataset was derived. This lineage is the key to fault tolerance: if a node fails, Spark can rebuild lost partitions by recomputing them from the original input or from a previously derived parent RDD, rather than depending on a central coordinator to persist every intermediate result.
+
+From a conceptual viewpoint, the RDD model is a natural fit for the analytical pipeline in this thesis. The raw simulation output file can be loaded as a distributed dataset, each partition can be transformed independently to extract a metric, and the partial results can be combined through a reduction step. In other words, Spark makes it possible to express the same map-reduce structure introduced earlier in a form that is parallel, fault tolerant, and better suited to repeated transformations over large datasets \parencite{zaharia2012rdd,sparkrddguide2024}.
+
+Even though more recent Spark APIs such as DataFrames and SQL provide higher-level interfaces, the RDD abstraction remains fundamental to understanding the framework. It explains why Spark can support both iterative processing and resilient recovery without requiring every intermediate value to be written to disk, which is one of the central reasons why it is attractive for large-scale analytics and scientific post-processing workflows \parencite{armbrust2015sparksql,zaharia2012rdd}.
+
+\subsection{Virtual machines}
+\label{subsec:cap2-virtual-machines}
+
+A virtual machine is a software-defined computer that runs on top of a physical host by emulating the hardware and operating system environment expected by a guest system. In other words, a VM does not require a dedicated physical machine for each service; instead, a single host can allocate isolated execution environments that behave like independent computers for networking, storage, process scheduling, and user access. This abstraction is especially useful in distributed systems because it allows a team to provision remote computing resources with a predictable configuration while keeping the underlying hardware manageable and reusable \parencite{steen2016distributed,merkel2014docker}.
+
+From the point of view of the final product of this project, the VM is the component that must be reached remotely. The Spark cluster, the Hadoop filesystem, and the supporting services are not meant to run directly on the analyst's laptop in the production deployment. Instead, the remote VM hosts the distributed processing stack, while the analyst's machine acts as a lightweight client that issues commands and retrieves result artefacts. This architecture makes the VM the actual execution environment for the end-to-end analytical workflow and the node that must be accessed through SSH in the operational system.
+
+This design matters because the VM provides the needed computational resources, persistent storage, and network accessibility that are difficult to guarantee on a personal workstation. It is also the component that normalizes the environment across a project: the same cluster configuration can be deployed on a remote server, monitored remotely, and accessed consistently from different clients without requiring each user to install the full software stack locally.
+
+\subsection{SSH and SFTP}
+\label{subsec:cap2-ssh-and-sftp}
+
+\gls{ssh} is a network protocol for encrypted remote access to computers and services. It provides authentication, confidentiality, and integrity for command execution over an insecure network, which makes it a natural choice for controlling a remote virtual machine from a local analytical workstation \parencite{openssh2024}. In the architecture proposed in this thesis, the analyst does not need to run Spark, HDFS, or Docker on their own machine. Instead, the local client connects to the remote \gls{vm} using \gls{ssh}, submits commands, inspects the state of the cluster, and triggers execution on the server where the distributed environment is deployed.
+
+\gls{sftp} is a file-transfer protocol built on top of the \gls{ssh} transport layer. It allows the client to upload small configuration files, such as scenario definitions in YAML, and to download output artefacts after a job has completed, while preserving the same encrypted communication channel. In practice, \gls{ssh} is used for remote execution and job orchestration, while \gls{sftp} is used for data exchange. This separation is important because file transfer and remote command execution have different operational requirements, but both benefit from the same secure authentication mechanism \parencite{openssh2024, sftpmanual2024}.
+
+This design reduces the complexity of the client side. The analyst interacts with a lightweight Python client that performs the necessary \gls{ssh} and \gls{sftp} calls to a remote VM, while the computationally expensive data processing remains in the managed distributed environment. This is a standard pattern for cluster administration and remote scientific workflows, and it is especially appropriate when the data volume is large enough that transferring raw simulation outputs to the local workstation would be inefficient or unnecessary.
+
 \subsection{PySpark}
+\label{subsec:cap2-pyspark}
 
 PySpark is the Python interface to Apache Spark, providing a high-level \gls{api} for distributed data processing while preserving the analytical flexibility expected in Python-based scientific workflows. In this work's context, its adoption is justified because the analysis and aggregation stage can be naturally expressed as distributed transformations and aggregations over simulation outputs, with better scalability than serial post-processing and without requiring the analyst to abandon the Python ecosystem already used in \gls{asa}. In addition, PySpark integrates natively with Hadoop-compatible storage layers, including direct read/write support over \gls{hdfs}, which is consistent with the data-local architecture proposed for reducing transfer overhead and processing large simulation batches efficiently \parencite{zaharia2012rdd,sparkpysparkdocs}.
 
 Finally, related works such as \textcite{li2018postprocessing} reported successful adoption of PySpark combined with \gls{hdfs} for large-scale simulation data post-processing. The study highlights the suitability of Spark's distributed execution model for performing aggregation and analytical operations over datasets that exceed the capacity of a single workstation. The positive results obtained in such environments provide evidence that the Spark-\gls{hdfs} ecosystem constitutes a mature and scalable solution for scientific post-processing workloads.
 
+\subsection{Docker and Containerization}
+\label{subsec:cap2-docker-and-containerization}
+
+Docker is a platform for operating-system-level virtualization that allows applications and their dependencies to be packaged into lightweight, portable execution environments called containers \parencite{merkel2014docker}. At a conceptual level, a container is not a full virtual machine: instead of emulating a complete guest operating system, it shares the host kernel while isolating process trees, filesystem views, network interfaces, and resource limits. This design makes containers substantially lighter than traditional virtual machines, while still providing a degree of isolation that is useful for reproducible software deployment.
+
+The main building block in Docker is the image. An image is a layered, read-only filesystem template that contains an operating-system base, installed software, configuration files, and the command that should be executed when the container starts. A container is then a runtime instance of that image, with its own isolated namespaces for processes, mounts, and networking. This separation is what allows several services, such as a Spark master, a Hadoop NameNode, and a Python client, to run side by side on the same host without interfering with one another.
+
+From a distributed systems perspective, Docker is especially valuable because it makes the deployment model explicit. Instead of manually installing and configuring each component on a physical machine, the system is expressed as a set of services with defined dependencies, resource constraints, and communication paths. In a local prototype, this means that the distributed stack can be launched as a collection of containers that communicate through a private network and can discover one another by service name. In a more realistic deployment, the same conceptual arrangement can be reproduced on remote hosts, making the cluster logically similar even when the underlying hardware differs.
+
+In practical environments, this multi-service orchestration is commonly implemented with Docker Compose, which allows a complete application stack to be declared in a single YAML file describing services, networks, volumes, startup order, and runtime parameters \parencite{dockercompose2024}. Instead of starting each container manually, Compose provides a deterministic way to create and manage the whole topology as one operational unit. For this thesis, that capability is important because the stack includes interdependent services such as Spark, HDFS, and auxiliary scripts. A declarative Compose configuration reduces configuration drift and helps preserve reproducibility between local validation and remote deployment.
+
+The practical relevance of Docker to this thesis is that it supports the reproducibility and portability of the distributed architecture. The local cluster includes multiple services with specific versions of Java, Python, Hadoop, Spark, and supporting tooling; these components must interact consistently for the workflow to be valid. Containerization packages those dependencies in a way that reduces configuration drift and makes the system easier to rerun, inspect, and compare across experiments. In this sense, Docker is not merely a deployment convenience; it is a mechanism that makes the distributed prototype easier to reason about and maintain.
+
 \section{Distributed File Systems (DFS)}
+\label{sec:cap2-distributed-file-systems-dfs}
 
 \gls{dfs} is a storage architecture in which files are partitioned and managed across multiple nodes while being exposed logically as a unified file space. The core motivation of a \gls{dfs} is to improve scalability, availability, and locality of access.
 
@@ -149,24 +215,32 @@ Figure~\ref{fig:distributed-memory} presents a simplified distributed-memory sys
 
 This organization allows the system to scale by adding new nodes, each contributing additional computational power, memory capacity, and storage resources. The aggregate resources of the cluster can therefore exceed the physical limitations of any individual machine. At the same time, the distributed nature of the architecture introduces challenges related to data placement, communication overhead, consistency, and fault tolerance.
 
-Distributed file systems can be viewed as a software layer built on top of such distributed-memory environments. Rather than exposing separate disks attached to individual nodes, a \gls{dfs} aggregates the storage resources available throughout the cluster and presents them as a unified logical file space. Consequently, applications interact with files as if they were stored in a single system, while the \gls{dfs} transparently manages the distribution, replication, and retrieval of data across the underlying nodes.
+\begin{sloppypar}
+Distributed file systems can be viewed as a software layer built on top of such
+distributed-memory environments. Rather than exposing separate disks attached to
+individual nodes, a \gls{dfs} aggregates the storage resources available throughout
+the cluster and presents them as a unified logical file space.
+\end{sloppypar} Consequently, applications interact with files as if they were stored in a single system, while the \gls{dfs} transparently manages the distribution, replication, and retrieval of data across the underlying nodes.
 
 The Google File System is a foundational example: it was designed to support very large datasets, tolerate commodity-node failures, and keep computation close to stored data \parencite{ghemawat2003gfs}. These same concerns are relevant because simulation outputs can grow into large collections of batch-generated files whose analytical value depends on efficient retrieval and processing.
 
+In the Hadoop ecosystem, \gls{hdfs} implements this distributed-storage idea in a concrete way. Files are split into blocks and spread across multiple DataNodes, while a dedicated NameNode keeps track of the namespace and block locations. Each block is usually replicated across several nodes, so the failure of one machine does not immediately make the data unavailable. When a Spark job reads a file, the scheduler tries to execute tasks on nodes that already store the required blocks, a design that minimizes network transfer and is commonly referred to as data locality. This is especially important for large simulation outputs, because transferring the complete payload to the analyst's workstation before aggregation would negate much of the benefit of distributed processing.
+
 For the present work, the relevance of a \gls{dfs} is straightforward. If raw results from many simulations are stored in a distributed file-oriented layer rather than in a single retrieval bottleneck, post-processing can be scheduled close to the output shards themselves. This does not eliminate all communication costs, but it reduces the need to move raw outputs to the analyst before any reduction has occurred. In practical terms, the \gls{dfs} becomes the persistence layer that supports server-side metric extraction and batch-level aggregation.
 
-Considering similar works such as \textcite{li2018postprocessing} and \textcite{morrissey2020velassco}, the \gls{dfs} framework adopted in this work will be \gls{hdfs}, as it provides high-throughput distributed storage, data locality, built-in fault tolerance, and seamless integration with the Hadoop/Spark ecosystem.
+Considering similar works such as \textcite{li2018postprocessing} and \textcite{morrissey2020velassco}, the \gls{dfs} framework adopted in this work will be \gls{hdfs}, as it provides high-throughput distributed storage, data locality, built-in fault tolerance, and seamless integration with the Hadoop/Spark ecosystem. In this setting, HDFS is not merely a storage backend: it is the substrate that enables the distributed architecture to treat the batch as a collection of data shards whose processing can be parallelized without central bottlenecks.
 
 \section{Related Work}
+\label{sec:cap2-related-work}
 
 The most directly relevant works identified for this thesis are those that address large-scale post-processing of simulation data, distributed scientific analytics, or alternatives to offline post-processing. The comparison developed in this thesis uses criteria that help distinguish both technologies and problem settings:
 
 \begin{itemize}
-    \item \textit{Processing paradigm} identifies whether the work relies on hybrid \gls{hpc} and big-data analytics, distributed data platforms, or in-situ / in-transit processing;
-    \item \textit{Data access pattern} indicates whether the analysis occurs offline after outputs are persisted, during simulation execution, or through distributed query layers;
-    \item \textit{Storage and file format} help reveal whether the solution expects specialized scientific formats, distributed key-value stores, or more generic file-oriented outputs;
-    \item \textit{User interface} describes the nature of system access: some systems expose \gls{api}s, while others are designed primarily as infrastructure or embedded analysis layers;
-    \item \textit{Primary goal} specifies the system's objective, whether it is scalable post-processing, distributed visualization, workflow automation, or I/O reduction during execution.
+    \item Processing paradigm identifies whether the work relies on hybrid \gls{hpc} and big-data analytics, distributed data platforms, or in-situ / in-transit processing;
+    \item Data access pattern indicates whether the analysis occurs offline after outputs are persisted, during simulation execution, or through distributed query layers;
+    \item Storage and file format help reveal whether the solution expects specialized scientific formats, distributed key-value stores, or more generic file-oriented outputs;
+    \item User interface describes the nature of system access: some systems expose \gls{api}s, while others are designed primarily as infrastructure or embedded analysis layers;
+    \item Primary goal specifies the system's objective, whether it is scalable post-processing, distributed visualization, workflow automation, or I/O reduction during execution.
 \end{itemize}
 
 Together, these criteria make it possible to compare the current \gls{asa} workflow and the proposed TG architecture against the literature on more than one angle.
@@ -180,7 +254,7 @@ Tables~\ref{tab:processing_paradigms_a} and~\ref{tab:processing_paradigms_b} sum
     \small
     \begin{tabularx}{\linewidth}{l >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X}
         \toprule
-        \textbf{Work} & \textbf{Processing Paradigm} & \textbf{Data Access Pattern} & \textbf{Storage / File Format} \\
+        Work & Processing Paradigm & Data Access Pattern & Storage / File Format \\
         \midrule
         Li et al. (2018) & Hybrid \gls{hpc} cluster + Big Data & Simulation output post-processing via \gls{hdfs} & \gls{hpc} outputs \\
         \addlinespace
@@ -192,7 +266,7 @@ Tables~\ref{tab:processing_paradigms_a} and~\ref{tab:processing_paradigms_b} sum
         \addlinespace
         \gls{asa} Project & Centralized post-processing over single storage; serial metric evaluation & Post-processing of already-generated outputs & Single database instance; raw outputs handled as csv files \\
         \addlinespace
-        \textbf{This TG proposal} & \textbf{Distributed post-processing architecture} & \textbf{Distributed output post-processing} & \textbf{\gls{dfs} for outputs; distributed storage of batch results/metrics} \\
+        This TG proposal & Distributed post-processing architecture & Distributed output post-processing & \gls{dfs} for outputs; distributed storage of batch results/metrics \\
         \bottomrule
     \end{tabularx}
 \end{table}
@@ -204,7 +278,7 @@ Tables~\ref{tab:processing_paradigms_a} and~\ref{tab:processing_paradigms_b} sum
     \small
     \begin{tabularx}{\linewidth}{l >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X}
         \toprule
-        \textbf{Work} & \textbf{User Interface} & \textbf{Primary Goal} & \textbf{Simulation Domain} \\
+        Work & User Interface & Primary Goal & Simulation Domain \\
         \midrule
         Li et al. (2018) & Jupyter Notebook via JupyterHub & Implement a hybrid workflow that integrates \gls{hpc} and Hadoop/Spark & Molecular simulation \\
         \addlinespace
@@ -216,7 +290,7 @@ Tables~\ref{tab:processing_paradigms_a} and~\ref{tab:processing_paradigms_b} sum
         \addlinespace
         \gls{asa} Project & \gls{asa} Webstation + JupyterHub + custom local scripts & Execute simulation batches and allow post-processing of results & Aerospace simulation \\
         \addlinespace
-        \textbf{This TG proposal} & \textbf{\gls{asa} platform + Python \gls{api}} & \textbf{Parallelize computing of simulation results} & \textbf{Aerospace simulation} \\
+        This TG proposal & \gls{asa} platform + Python \gls{api} & Parallelize computing of simulation results & Aerospace simulation \\
         \bottomrule
     \end{tabularx}
 \end{table}

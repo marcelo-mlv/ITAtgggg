@@ -1,6 +1,7 @@
 This chapter provides the contextualization, motivation, and objectives for the development of a distributed computing architecture designed specifically for aerospace simulation environments. It begins by examining the evolution of distributed computing from centralized systems to modern cloud-based infrastructures, then identifies the critical challenges in managing large-scale simulation outputs. It also presents the research objective: the design and implementation of AeroSOuDA, a distributed architecture for efficient post-processing and analysis of aerospace simulation results.
 
 \section{Contextualization}
+\label{sec:cap1-contextualization}
 
 Distributed computing emerged as a vital paradigm to address the fundamental limitations of centralized architecture, particularly when faced with the exponential growth of Big Data, complex simulations, and modern artificial intelligence. For decades, vertical scaling (scale-up) sufficed as hardware manufacturers consistently increased single-core processor speeds in accordance with Moore's Law \parencite{hennessy2019architecture}. 
 
@@ -13,6 +14,7 @@ The definitive turning point arrived in the 2000s when technology giants introdu
 However, the impact of this MapReduce-driven revolution expanded far beyond commercial data mining and web search algorithms. This divide-and-conquer approach to fragment massive datasets into parallel, independent tasks became the vital engine for accelerating high-fidelity complex simulations. Fields demanding intensive mathematical modeling such as particle physics, computational fluid dynamics and aerospace simulations historically collided with the stark limitations of sequential processing. By translating the divide-and-conquer concepts popularized by MapReduce into \gls{hpc} environments \parencite{ekanayake2010twister}, modern distributed systems can now simulate hyper-complex scenarios in record time \parencite{reed2015exascale}. What once required months of processing on a single centralized machine is now executed in a matter of hours or minutes across computing clusters, which can also create a bottleneck from post-processing such massive amounts of data.
 
 \section{Motivation}
+\label{sec:cap1-motivation}
 
 The amount of simulation data produced nowadays is also growing rapidly, especially in environments where multiple scenarios, parameter sweeps, and repeated executions are needed to support analytical decision making. In many scientific and industrial contexts, the main challenge is no longer only to execute simulations, but also to interpret the large volumes of output that they generate. Once a simulation execution is complete, analysts still need to extract useful information from raw results, compare alternative scenarios, and transform those outputs into metrics that can support robust conclusions. This problem becomes particularly relevant when a simulation batch contains many runs and each run produces detailed records that must later be processed, filtered, and aggregated \parencite{li2018postprocessing,lagares2022aquila}.
 
@@ -23,8 +25,11 @@ Because of these challenges, modern computing has produced frameworks and tools 
 For simulation-based decision support, this discussion has a very concrete implication. If the outputs of a simulation batch can be partitioned, stored, and processed in parallel, then the time between executing the simulations and obtaining analytical insight can be reduced substantially. The analyst no longer needs to treat post-processing as a separate, mostly manual phase performed after data retrieval. Instead, the infrastructure itself can participate in the production of metrics and aggregate values. This is precisely the motivation of the present work: to understand how distributed computing ideas can be applied not to the execution of the simulation itself, but to the \gls{aa} stage that transforms raw simulation outputs into decision-support products.
 
 \section{Objective}
+\label{sec:cap1-objective}
 
-This work aims to design and implement a distributed computing architecture for aerospace simulation environments. This architecture will be called ''AeroSOuDA'': \textbf{Aero}space \textbf{S}imulation \textbf{Ou}tput \textbf{D}istributed \textbf{A}rchitecture. The goal is to integrate the final solution to \gls{asa}, the project that motivated this work in the first place. In order achieve this goal, some rules must be established:
+\begin{sloppypar}
+This work aims to design and implement a distributed computing architecture for aerospace simulation environments. This architecture will be called ''AeroSOuDA'': Aerospace Simulation Output Distributed Architecture. The goal is to integrate the final solution to \gls{asa}, the project that motivated this work in the first place. In order achieve this goal, some rules must be established:
+\end{sloppypar}
 
 \begin{itemize}
     \item The architecture must support a workflow in which the analyst (user) can define or select via interface a metric function and an aggregate function before simulation batch execution;

@@ -28,7 +28,7 @@
 %%%  $HeadURL: http://www.apgita.org.br/apgita/teses-e-latex.php $
 %%%
 %%% ITALUS
-%%% Instituto Tecnológico de Aeronáutica --- ITA, Sao Jose dos Campos, Brasil
+%%% Instituto Tecnológico de Aeronáutica   ITA, Sao Jose dos Campos, Brasil
 %%%                   http://groups.yahoo.com/group/italus/
 %%% Discussion list: italus {at} yahoogroups.com
 %%%
@@ -78,6 +78,16 @@
 %PACOTEFIGURAS_SE _ERRADO_ESXCLUIR_ACIMA
 \usepackage{booktabs}
 %PACOTETABELAS_SE _ERRADO_ESXCLUIR_ACIMA
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc, fit, backgrounds}
+\usepackage{enumitem}
+
+% ── Global mock-up helpers (used in Cap6, Cap7) ───────────────────────────────
+\newcommand{\PLACEHOLDER}[1]{[#1]}
+\newcommand{\RESULT}[3]{#1\,\(\pm\)\,#2\,#3}
+
+% Keep numbering up to \subsubsection to avoid paragraph numbers like 6.5.2.0.1.
+\setcounter{secnumdepth}{3}
 %HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
 
 %++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -127,14 +137,14 @@
 
 % membros da banca examinadora (???)
 
-% \examiner{Prof. Dr.}{Alan Turing}{Presidente}{ITA}
-% \examiner{Prof. Dr.}{Linus Torwald}{}{UXXX}
+% \examiner{Prof. Dr.}{Clayson Sandro Francisco de Sousa Celes}{Professor}{ITA}
+% \examiner{Prof. Dr.}{Inaldo Capistrano Costa}{Professor}{ITA}
 % \examiner{Prof. Dr.}{Richard Stallman}{}{UYYY}
 % \examiner{Prof. Dr.}{Donald Duck}{}{DYSNEY}
 % \examiner{Prof. Dr.}{Mickey Mouse}{}{DISNEY}
 
 % Data da defesa (mês em maiúsculo, se trabalho em inglês, e minúsculo se trabalho em português)
-\date{12}{june}{2026}
+\date{13}{november}{2026}
 
 % Número CDU - (somente para TG) (crux)
 % \cdu{???.??}
@@ -162,8 +172,18 @@
 \chapter{Aerospace Simulation Output Distributed Architecture (AeroSOuDA)}
 \input{Cap3/cap3}
 
-\chapter{Next Steps}
+\chapter{Local Cluster Implementation}
 \input{Cap4/cap4}
+
+\chapter{Remote Cluster Deployment}
+\input{Cap5/cap5}
+
+\chapter{Experimental Evaluation}
+\input{Cap6/cap6}
+
+\chapter{Conclusions}
+\input{Cap7/cap7}
+
 
 % REFERENCIAS BIBLIOGRAFICAS
 \renewcommand\bibname{\itareferencesnamebabel} %renomear título do capítulo referências

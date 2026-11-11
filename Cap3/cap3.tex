@@ -1,6 +1,7 @@
 This chapter aims to present the proposed design for AeroSOuDA, the distributed computing architecture for aerospace simulation outputs, comparing the a given current architecture and its struggles with a proposed solution for scalability and performance improvement.
 
 \section{Current Architecture}
+\label{sec:cap3-current-architecture}
 
 The current analytical pipeline considered here is shown in Figure~\ref{fig:current-pipeline} and can be summarized as follows:
 
@@ -33,6 +34,7 @@ This thesis thus proposes an architecture implementation in which the simulation
 \end{itemize}
 
 \section{Proposed Architecture}
+\label{sec:cap3-proposed-architecture}
 
 The proposed architecture replaces the current centralized analysis logic with a distributed architecture in which simulation outputs are stored in a \gls{dfs} and processed in parallel. Conceptually, the workflow remains similar at a high level: simulation results are produced, transformed into metrics, and then combined into a batch-level result. The main difference is where and how these transformations occur. Instead of transferring large raw outputs to the analyst before reduction occurs, the infrastructure itself should perform the metric extraction and aggregation tasks as close as possible to the stored data.
 

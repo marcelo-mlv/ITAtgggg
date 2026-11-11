@@ -1,27 +1,1047 @@
-The expected contribution of the complete work is a software architecture that improves the analysis and aggregation stage of scenario-based simulation outputs by combining distributed storage, distributed computing, and analyst-defined metric semantics. If successful, the resulting system should reduce the need for manual result transfer, shorten the time required to obtain analytical products from simulation batches, and provide a more scalable basis for future work in decision-support workflows built on \gls{asa}, helping \gls{cbp} analysis as a whole for the Brazilian Air Force.
+% ─────────────────────────────────────────────────────────────────────────────
+%  Chapter 4 — Local Cluster Implementation
+% ─────────────────────────────────────────────────────────────────────────────
 
-\section{Research and Validation}
+% TikZ styles shared across all flowcharts in this chapter
+% NOTE: \gls{} is intentionally NOT used inside TikZ node labels — hyperref
+%       link anchors conflict with pgf boxes and \scalebox.
+\tikzset{
+  lcproc/.style={rectangle, rounded corners=3pt, draw=black!70, fill=blue!8,
+                 text width=5.8cm, minimum height=0.75cm, text centered,
+                 font=\small, inner sep=5pt},
+  lcdec/.style={diamond, aspect=2.4, draw=black!70, fill=orange!15,
+                text width=3.0cm, minimum height=0.75cm, text centered,
+                font=\small, inner sep=2pt},
+  lcio/.style={ellipse, draw=black!70, fill=green!20,
+               text width=2.6cm, minimum height=0.7cm,
+               text centered, font=\small, inner sep=3pt},
+  lcside/.style={rectangle, rounded corners=3pt, draw=black!60, fill=gray!10,
+                 text width=4.1cm, minimum height=0.75cm, text centered,
+                 font=\small, inner sep=5pt},
+  lcblock/.style={rectangle, rounded corners=4pt, draw=black!70,
+                  text width=3.4cm, minimum height=1.1cm, text centered,
+                  font=\small, inner sep=6pt},
+  lcarr/.style={thick,->,>=Stealth},
+  lcline/.style={thick},
+}
+
+The preceding chapters presented the motivation, conceptual background, and proposed design of
+\gls{aerosouda}. This chapter describes the first concrete realization of that proposal: a local
+cluster prototype that validates the architecture's feasibility before deployment on a remote
+virtual machine. The implementation comprises two cooperating software modules: (1) a \gls{cli}
+application that guides the analyst through the full analytical pipeline; and (2) a distributed
+processing job, running inside a local Apache Spark cluster, that applies the MapReduce paradigm
+to extract entity-level metrics and compute batch-level aggregate values. Together, these modules
+realize the pipeline described in Chapter~3 in a form that can be deployed and tested on a
+single workstation.
+
+The chapter is organized as follows.
+Section~\ref{sec:cluster-infra} describes the containerized cluster infrastructure.
+Section~\ref{sec:cli-module} covers the interactive \gls{cli} module.
+Section~\ref{sec:csv-processor} details the distributed \gls{csv} processor.
+Section~\ref{sec:integration} explains the integration between the two modules.
+Section~\ref{sec:hdfs-integration} documents the \gls{hdfs} integration added in a subsequent
+iteration to replace Docker bind-mount volumes with a proper distributed filesystem.
+Section~\ref{sec:mapreduce-rationale} provides a comparative analysis of Spark \gls{api}
+alternatives and justifies the choice of \texttt{mapPartitions} for the map phase.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Cluster Infrastructure}
+\label{sec:cluster-infra}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Container Orchestration with Docker Compose}
+\label{subsec:cap4-container-orchestration-with-docker-compose}
+
+The cluster is instantiated as a set of Docker containers \parencite{merkel2014docker} orchestrated
+by Docker Compose, a tool that defines and runs multi-container Docker applications from a single
+declarative configuration file. Docker enables each node to run as a lightweight, isolated process
+that shares the host operating-system kernel but maintains a separate filesystem, network interface,
+and resource allocation. This containerisation approach reproduces the logical properties of a
+distributed cluster without requiring dedicated physical hardware, making the prototype easy to
+deploy and reproduce on any workstation with Docker installed.
+
+The current cluster configuration defines thirteen containers:
 
 \begin{itemize}
-    \item Evaluate MapReduce viability as a processing paradigm for this work's needs;
-    \item Assess \gls{hdfs} for storage capability, data locality, and batch-level post-processing support;
-    \item Study the existing \gls{asa} codebase and workflow to identify integration points.
+      \item spark-master: the Spark standalone master node, responsible for accepting
+            application submissions, scheduling tasks, and assigning work to the registered worker
+            nodes. It exposes the Spark web \gls{ui} on port 8080.
+      \item spark-worker-1 through spark-worker-6: six Spark worker nodes, each
+            running one executor process. Workers register with the master on startup and report their
+            available processing cores and memory. All six workers share a common container image and
+            differ only in their hostnames.
+      \item spark-history-server: Spark server used to reconstruct completed job timelines.
+      \item namenode: the \gls{hdfs} NameNode, which maintains the filesystem namespace and
+            block-location metadata.
+      \item hdfs-datanode-1 through hdfs-datanode-4: four \gls{hdfs} DataNode
+            containers, each storing raw data blocks on local storage and serving read and write
+            requests directly to Spark executors.  The replication factor is set to two, so each
+            block has one primary copy and one replica distributed across the four DataNodes.
 \end{itemize}
 
-\section{Implementation}
+All containers are connected through a Docker bridge network, enabling inter-container communication
+using container names as resolvable hostnames. Volume mounts expose the host's \texttt{inputs/},
+\texttt{outputs/}, and \texttt{scenarios/} directories inside the \texttt{spark-master} container,
+so the Spark job can read input data and write results without explicit file transfers under normal
+operation.
+
+\subsection{Scenario Configuration Format}
+\label{sec:scenario-config}
+
+A key design decision in this implementation is the use of \gls{yaml} for scenario configuration
+files, in contrast to the \gls{json} format used by the \gls{asa} ecosystem for simulation scenario
+definitions. While \gls{json} is a strict, minimal data-interchange format well suited for
+machine-generated content, \gls{yaml} is a human-readable data-serialisation language that supports
+inline comments, multi-line strings, and a more forgiving syntax \parencite{benkiki2009yaml}.
+Because scenario configuration files are intended to be created, inspected, and occasionally
+modified by analysts, \gls{yaml} reduces the authoring cost significantly.
+
+The raw simulation scenario inputs exported from the \gls{asa} Webstation environment are in
+\gls{json} format.  These files are processed by the \gls{asa} toolchain to produce the
+\gls{csv} result files consumed by the distributed processor presented in this thesis.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsubsection{Annotated YAML Reference}
+\label{subsec:yaml-reference}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Each scenario configuration file is a plain-text \gls{yaml} document.  An example using the
+Quick-Reaction scenario is shown below; Section~\ref{subsec:yaml-fields} explains every field:
+
+\begin{verbatim}
+name: "Quick-Reaction"
+description: >
+  Pearson correlation between red radar longitude
+  and blue fighter survival time.
+
+x_variable:
+  name: "red_radar_longitude"
+  entity_selector:
+    side: "red"
+    type_contains: "radar"
+  field_path: "state.geo_pos.longitude"
+  frame_aggregation: "last"
+  scope: "per_experiment"
+
+y_variable:
+  name: "blue_fighter_survival_time_frames"
+  entity_selector:
+    side: "blue"
+    type_contains: "fighter"
+  field_path: "frame"
+  frame_aggregation: "max"
+  scope: "per_entity"
+
+batch_aggregation:
+  type: "pearson_correlation"
+\end{verbatim}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsubsection{Field-by-Field Reference}
+\label{subsec:yaml-fields}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Table~\ref{tab:yaml-fields} provides a complete reference for all supported fields within an
+\texttt{x\_variable} or \texttt{y\_variable} block.  The \texttt{batch\_aggregation} block is
+described separately in Section~\ref{subsec:batch-agg}.
+
+\begin{table}[htbp]
+\centering
+\caption{Scenario \gls{yaml} field reference for \texttt{x\_variable} and \texttt{y\_variable}.}
+\label{tab:yaml-fields}
+\footnotesize
+\begin{tabularx}{\linewidth}{l l l >{\raggedright\arraybackslash}X}
+\toprule
+Field & Required & Type & Description and options \\
+\midrule
+\texttt{name} & Yes & string & Identifier used in the output \gls{csv} column header and in the scatter plot axis label. Used exclusively for describing the variable. \\
+\addlinespace
+\texttt{entity\_selector.side} & Yes & string & Restricts extraction to entities on the specified team. Must be one of \texttt{"blue"} or \texttt{"red"}. \\
+\addlinespace
+\texttt{entity\_selector.type\_contains} & No & string & Case-insensitive substring that must appear in the entity type field (e.g.\ \texttt{"fighter"}, \texttt{"radar"}, \texttt{"F-16C"}). If omitted, all entities on the specified side are matched. \\
+\addlinespace
+\texttt{entity\_selector.name\_contains} & No & string & Case-insensitive substring that must appear in the entity name field. Used when multiple entity types share the same side and type but differ only by name. \\
+\addlinespace
+\texttt{field\_path} & Yes & string & Dot-notation path to the numeric value within the \texttt{payload} \gls{json} column of the \gls{csv}. The special value \texttt{"frame"} returns the integer frame number directly (useful for computing survival time via \texttt{max} aggregation). See Section~\ref{subsec:fieldpath-discovery} for how to discover valid paths. \\
+\addlinespace
+\texttt{frame\_aggregation} & Yes & enum & Strategy for combining multiple row values for the same entity within one experiment into a single observation. Options: \texttt{"max"} (highest value across all frames), \texttt{"min"} (lowest value), \texttt{"last"} (value at the highest frame number), \texttt{"first"} (value at the lowest frame number). \\
+\addlinespace
+\texttt{scope} & Yes & enum & Granularity of the resulting data point. \texttt{"per\_entity"}: one observation per (entity, experiment) pair, suitable for entity-level analyses when multiple entities (e.g.\ two fighters) are tracked in each run. \texttt{"per\_experiment"}: one observation per experiment, suitable for when the independent variable is uniform within an experiment (e.g.\ the radar's longitude is the same for all entities in the same run). \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+It is important to mention beforehand the program outputs generated by this project. Each
+execution produces 3 files: a \gls{json} summary file containing execution metadata and
+aggregate values, an aggregated \gls{csv} table with the processed analytical dataset,
+and a PNG image with the scatter plot used for visual inspection of the x-y relationship.
+These three files are the expected outputs referenced throughout this chapter.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsubsection{Discovering the \texttt{field\_path}}
+\label{subsec:fieldpath-discovery}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The \texttt{field\_path} value must correspond to a valid key path inside the \texttt{payload}
+column of the simulation \gls{csv}.  Since the payload is a nested Python-literal or \gls{json}
+dictionary, the structure depends on the entity type and must be inspected empirically.  The
+recommended workflow for discovering valid paths is:
+
+\begin{enumerate}
+    \item Open the output \gls{csv} from a completed batch execution  in a Python environment.
+    \item Filter rows to the entity type of interest;
+    \item Inspect the resulting dictionaries to identify the desired field and its path;
+    \item The dot-notation path is the concatenation of dictionary keys from root to leaf:
+          \texttt{state.geo\_pos.longitude}, \texttt{state.damage}, \texttt{mach}, etc.
+\end{enumerate}
+
+It is important to note that some simulation parameters set as sweep parameters in the JSON
+file may not appear directly as entity state fields in the payload column of the \gls{csv}.
+Every row of the output \gls{csv} carries the entity's runtime state at a given frame,
+but it does not carry the experiment-level parameter values that the analyst configured
+in the batch before execution. This is a limitation of the current \gls{yaml}
+scenario schema: any \texttt{field\_path} must correspond to a path that exists inside an
+individual payload dictionary. This is further discussed at Section~\ref{sec:conc-limitations}.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsubsection{Batch Aggregation and Pearson Correlation}
+\label{subsec:batch-agg}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The \texttt{batch\_aggregation} block specifies how the per-entity or per-experiment
+\((x_i, y_i)\) pairs extracted across all experiments are combined into a single batch-level
+result.  The \texttt{type} field accepts one of four string values:
 
 \begin{itemize}
-    \item Create a user \gls{api} for defining or selecting aggregate functions before processing;
-    \item Implement a \gls{dfs} for simulation outputs;
-    \item Build distributed computing logic to extract metrics and compute aggregate values;
-    \item Test the architecture on a local computer cluster;
-    \item Progressively integrate this architecture into \gls{asa} systems.
+    \item \texttt{"pearson\_correlation"}: computes the Pearson product-moment correlation
+          coefficient $r$ between the x and y columns (see Section~\ref{subsec:pearson-theory}).
+          This is the primary analytical output of this work and the type with full
+          statistical interpretation.
+    \item \texttt{"scatter\_only"}: generates the scatter plot without computing any numeric
+          aggregate.  Useful for visual exploratory analysis before choosing a statistical method.
+    \item \texttt{"mean\_y"}: computes the arithmetic mean of all y observations across the batch.
+          Useful when the goal is to characterise average entity behaviour rather than a
+          relationship between two variables.
+    \item \texttt{"count\_y"}: counts the number of valid y observations.  Useful as a diagnostic
+          to verify that the entity selector is matching the expected number of entities.
 \end{itemize}
 
-\section{Evaluation}
+Within the scope of this work, Pearson correlation is the only batch aggregation type
+used in the experimental evaluation.  The other types (\texttt{scatter\_only}, \texttt{mean\_y},
+\texttt{count\_y}) are implemented in the codebase (\texttt{processor/output.py}) and can be
+activated by changing the \texttt{type} field in the \gls{yaml} without any modification to the
+processing infrastructure.  Extending the system to support richer aggregation functions  
+such as Spearman rank correlation, polynomial regression, or multi-variable analysis, would
+require adding the corresponding computation to the \texttt{compute\_batch\_aggregate} function
+in \texttt{processor/output.py} and declaring the new type name in the scenario configuration
+schema.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsubsection{Mathematical Foundation: Pearson Correlation Coefficient}
+\label{subsec:pearson-theory}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{sloppypar}
+The Pearson product-moment correlation coefficient, introduced by Karl Pearson in~1895
+\parencite{pearson1895notes}, measures the degree of linear association between two
+continuous random variables $X$ and $Y$.  For a sample of $n$ paired observations
+$(x_1, y_1), \ldots, (x_n, y_n)$, it is defined as \parencite{montgomery2014statistics}:
+\end{sloppypar}
+
+\begin{equation}
+\label{eq:pearson-r}
+r = \frac{\displaystyle\sum_{i=1}^{n}(x_i - \bar{x})(y_i - \bar{y})}
+         {\displaystyle\sqrt{\sum_{i=1}^{n}(x_i - \bar{x})^2}
+          \cdot
+          \sqrt{\sum_{i=1}^{n}(y_i - \bar{y})^2}}
+\end{equation}
+
+where $\bar{x} = \tfrac{1}{n}\sum x_i$ and $\bar{y} = \tfrac{1}{n}\sum y_i$ are the sample
+means.  An equivalent formulation expresses $r$ in terms of sample covariance and standard
+deviations:
+
+\begin{equation}
+\label{eq:pearson-cov}
+r = \frac{\hat{\text{Cov}}(X, Y)}{\hat{\sigma}_X \cdot \hat{\sigma}_Y}
+\end{equation}
+
+The coefficient satisfies $r \in [-1,\, +1]$ for all finite samples.  Its interpretation is:
 
 \begin{itemize}
-    \item Compare end-to-end processing time against the current serial pipeline for representative batches;
-    \item Quantify performance gains from parallel metric extraction, reduced data transfer, and storage access improvements;
-    \item Assess qualitative aspects: ease of use, deployment complexity, and coupling with the existing infrastructure;
+    \item $r = +1$: perfect positive linear relationship, $y$ increases proportionally
+          with $x$.
+    \item $r = -1$: perfect negative linear relationship, $y$ decreases proportionally
+          as $x$ increases.
+    \item $r = 0$: no linear association (the variables may still be related in a non-linear
+          manner).
+    \item $|r| > 0.7$ is commonly interpreted as a strong linear association;
+          $0.3 < |r| \leq 0.7$ as moderate; $|r| \leq 0.3$ as weak
+          \parencite{montgomery2014statistics}.
 \end{itemize}
+
+Comparison with other correlation measures.
+Pearson's $r$ captures only linear relationships and is sensitive to outliers because
+it uses raw values.  Two alternative rank-based measures are commonly used when linearity
+cannot be assumed or the data contains extreme values:
+
+\begin{itemize}
+    \item Spearman's $\rho$ replaces raw values with their ranks before applying
+          Equation~\eqref{eq:pearson-r}.  It captures any monotonic relationship
+          (not only linear) and is robust to outliers.  It is the appropriate choice when
+          the relationship is expected to be non-linear but consistently increasing or decreasing.
+
+    \item Kendall's $\tau$ is based on the number of concordant and
+          discordant observation pairs.  It is also non-parametric and tends to be
+          more interpretable when sample sizes are small.
+\end{itemize}
+
+Pearson's $r$ was chosen for this work because the analytical scenarios are designed as
+sensitivity analyses in which the independent variable (e.g.\ radar longitude) is swept
+over a continuous range and the response (e.g.\ fighter survival time) is expected to vary
+monotonically and approximately linearly with the input.  The choice of Pearson $r$ is
+consistent with similar distributed simulation post-processing works
+\parencite{li2018postprocessing,lagares2022aquila}, in which scalar correlation between
+a swept parameter and a performance metric is the primary analytical product.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsubsection{Creating a Scenario YAML from Scratch}
+\label{subsec:yaml-creation}
+% ─────────────────────────────────────────────────────────────────────────────
+
+To create a new scenario configuration from scratch, the analyst should follow these steps:
+
+\begin{enumerate}
+    \item Identify the analytical question.  The \gls{yaml} encodes one bivariate
+          question of the form ``how does [x entity state] relate to [y entity state] across
+          experiments?''.  Example: ``does the radar's longitude correlate with damage taken
+          by the opposing team fighters?''
+
+    \item Identify the x entity.  Consult the Scenario \gls{json} file ,which
+          describes all components and their sides and types,
+          to find the entity whose attribute was swept as the alias.  The entity type string
+          used in \texttt{type\_contains} should be a substring of the \texttt{type} field
+          found in the payload \texttt{id} sub-dict.
+
+    \item Discover the \texttt{field\_path} values.  Follow the procedure described
+          in Section~\ref{subsec:fieldpath-discovery}: load a sample of the output \gls{csv}
+          in Python, filter by \texttt{asa\_type~=~2} and the target entity type, and inspect
+          the parsed payload dictionaries to identify the desired key paths.
+
+    \item Choose \texttt{frame\_aggregation} and \texttt{scope}.
+          \begin{sloppypar}For entity
+          attributes that are constant throughout the simulation (e.g.\ radar position),
+          choose \texttt{frame\_aggregation: "last"} and \texttt{scope: "per\_experiment"}.
+          For evolving attributes (e.g.\ fighter damage that accumulates over time),
+          choose \texttt{frame\_aggregation: "max"} (or \texttt{"last"}) and
+          \texttt{scope: "per\_entity"}.\end{sloppypar}
+
+    \item Save the file with a \texttt{.yaml} extension in the \texttt{scenarios/}
+          directory.  When running the \gls{cli}, select the file from the interactive menu
+          or pass it via the \texttt{--scenario-config} argument.  The wizard mode
+          (option 7a in the pipeline) can also generate a valid \gls{yaml} from guided prompts,
+          which the analyst can then inspect and manually adjust.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{The Command-Line Interface Module}
+\label{sec:cli-module}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Overview}
+\label{subsec:cap4-overview}
+
+The \gls{cli} module (\texttt{cli.py}) is the primary user-facing entry point for the analyst. It
+orchestrates the full analytical pipeline through a sequence of interactive prompts, removing the
+need to manually manage Docker containers, craft Spark submission commands, or handle file
+transfers. The module uses the Rich library \parencite{willmcgugan2024rich} for styled terminal
+output including coloured panels, tables, and live progress indicators and the questionary
+library \parencite{questionary2024} for interactive selection menus and text prompts.
+
+The module is designed to run entirely in the terminal, requiring no graphical interface. Each
+stage of the pipeline is presented as a guided step, with descriptive messages, validation
+feedback, and error panels that explain the cause of any failure and suggest corrective actions.
+
+\subsection{Pipeline Flow}
+\label{subsec:cap4-pipeline-flow}
+
+Figure~\ref{fig:cli-flow} presents the \gls{cli} pipeline as a flowchart. The pipeline is composed
+of nine sequential stages, one of which contains a decision branch routing to different sub-flows
+depending on analyst choices.
+
+\begin{figure}[htbp]
+\centering
+\scalebox{0.78}{%
+\begin{tikzpicture}[x=1cm, y=1cm]
+
+%% ── Main column ────────────────────────────────────────────────────────
+\node[lcio]   (start)  at (0,  0.0) {Start};
+\node[lcproc] (val)    at (0, -1.4) {1. Validate working directory};
+\node[lcproc] (wel)    at (0, -2.8) {2. Display welcome screen};
+\node[lcproc] (dkr)    at (0, -4.2) {3. Check Docker daemon};
+\node[lcproc] (clu)    at (0, -5.6) {4. Check Spark cluster status};
+\node[lcproc] (csv)    at (0, -7.0) {5. Pick CSV from \texttt{inputs/}};
+\node[lcproc] (insp)   at (0, -8.4)
+    {6. Validate CSV; inspect entity types and fields};
+\node[lcdec]  (ymlsrc) at (0,-10.0) {Scenario config?};
+
+%% ── YAML branches ─────────────────────────────────────────────────────
+\node[lcside] (wiz) at (-4.3,-12.4)
+    {7a. Create YAML config\\ via guided wizard};
+\node[lcside] (lod) at ( 4.3,-12.4)
+    {7b. Load existing YAML\\ from \texttt{scenarios/}};
+
+%% ── Final stages ──────────────────────────────────────────────────────
+\node[lcproc] (conf) at (0,-15.0) {8. Confirm execution};
+\node[lcproc] (job)  at (0,-16.4) {9. Submit Spark job; monitor progress};
+\node[lcproc] (res)  at (0,-17.8) {10. Retrieve and display results};
+\node[lcio]   (end)  at (0,-19.2) {End};
+
+%% ── Main arrows ───────────────────────────────────────────────────────
+\draw[lcarr] (start) -- (val);
+\draw[lcarr] (val)   -- (wel);
+\draw[lcarr] (wel)   -- (dkr);
+\draw[lcarr] (dkr)   -- (clu);
+\draw[lcarr] (clu)   -- (csv);
+\draw[lcarr] (csv)   -- (insp);
+\draw[lcarr] (insp)  -- (ymlsrc);
+
+%% ── Scenario decision ─────────────────────────────────────────────────
+\draw[lcarr] (ymlsrc.west)
+    -- node[above,font=\scriptsize,pos=0.6]{new}
+    (-4.3,-10.0) -- (wiz.north);
+\draw[lcarr] (ymlsrc.east)
+    -- node[above,font=\scriptsize,pos=0.6]{load}
+    (4.3,-10.0) -- (lod.north);
+
+%% Merge back
+\draw[lcline] (wiz.south) -- (-4.3,-13.7) -- (0,-13.7);
+\draw[lcline] (lod.south) -- ( 4.3,-13.7) -- (0,-13.7);
+\draw[lcarr]  (0,-13.7) -- (conf.north);
+
+%% ── Final arrows ──────────────────────────────────────────────────────
+\draw[lcarr] (conf) -- (job);
+\draw[lcarr] (job)  -- (res);
+\draw[lcarr] (res)  -- (end);
+
+\end{tikzpicture}%
+}
+\caption{Execution pipeline of the \gls{cli} module (\texttt{cli.py}).}
+\label{fig:cli-flow}
+\end{figure}
+
+The pipeline's stages are described as follows:
+
+\begin{enumerate}
+
+\item Working directory validation. Before any user interaction, the module verifies
+that it is being executed from the \texttt{localcluster/} directory, where
+\texttt{docker-compose.yml} and all required subdirectories reside. If the script is launched
+from an incorrect location (for example, from an external disk that Docker cannot mount), the
+pipeline exits immediately with a descriptive error message.
+
+\item Welcome screen. A styled panel introduces the tool and lists the pipeline steps.
+
+\item Docker daemon check. The module verifies that the Docker daemon is running and
+accessible by issuing a test \texttt{docker ps} command. If the daemon is not running, the
+program aborts, requiring the user to start it beforehand.
+
+\item Cluster status check. The \gls{cli} verifies that the Spark cluster is running
+and reachable by querying the Docker daemon for the status of the \texttt{spark-master} container.
+If the cluster is not running, the pipeline exits immediately with a clear panel that instructs
+the analyst to start the cluster manually via \texttt{docker compose up -d} before re-invoking
+the tool. This policy was adopted to keep the \gls{cli} within the minimal viable scope: it avoids
+requiring \gls{cli} users to have elevated permissions for automatic daemon manipulation and
+eliminates a class of silent failures that can arise when the cluster master restarts
+independently of the workers. The analyst is responsible for starting the cluster once before
+running the pipeline; the \gls{cli} verifies its availability and fails fast if it is absent.
+
+\item \gls{csv} selection. The analyst selects a pre-existing \gls{csv} file from the
+\texttt{inputs/} directory. The module lists all \texttt{.csv} files found in that directory
+together with their sizes and lets the analyst choose one interactively. If the directory is
+empty, the pipeline exits with guidance on how to place a simulation result file there.
+
+\item \gls{csv} validation and entity inspection. The selected \gls{csv} is sampled (up
+to 10\,000 rows) and validated against the required column schema. The schema requires twelve
+columns: \texttt{id}, \texttt{frame}, \texttt{execution\_id}, \texttt{mixr\_type},
+\texttt{asa\_type}, \texttt{asa\_custom\_type}, \texttt{payload}, \texttt{sim\_time},
+\texttt{utc\_time}, \texttt{execution\_uuid}, \texttt{batch\_id}, and \texttt{experiment}.
+Missing columns are listed and the pipeline exits with a descriptive error. Valid files proceed
+to entity inspection: the \texttt{payload} column of each sampled row is parsed to discover
+entity types, and a table is displayed showing each entity's side, type name, representative
+names, and available nested field paths.
+
+\item Scenario configuration. The analyst selects or creates a \gls{yaml} scenario
+configuration file. Two options are offered: loading an existing file from the
+\texttt{scenarios/} directory (with a human-readable preview of its content), or creating a new
+one through a guided wizard. The wizard asks a sequence of plain-language questions first the Y
+variable (the metric of interest), then the X variable (the independent parameter), and finally
+the batch aggregation function and internally translates the answers into a \gls{yaml} file
+saved to \texttt{scenarios/} for future reuse. The analyst is never required to understand or
+manually edit \gls{yaml} syntax.
+
+\item Execution confirmation. A summary panel lists the selected \gls{csv} file, the
+scenario name, the X and Y variable definitions, and the output directory. The analyst explicitly
+confirms before the job is submitted.
+
+\item Spark job submission and monitoring. The job is submitted by executing the
+\texttt{run\_csv\_processor.sh} wrapper script inside the \texttt{spark-master} container via
+\texttt{docker compose exec}. The standard output and error streams of the container process are
+captured simultaneously by two reader threads. Spark's stage-progress lines formatted as
+\texttt{[Stage~N:~...~(done~+~active)~/~total]} are matched by a regular expression, and the
+derived completion percentage is displayed as a live progress indicator with an elapsed-time
+counter. Notable status messages printed by the processing script are also surfaced to the
+progress display.
+
+\item Result retrieval and presentation. After the job terminates, output files are
+copied from the container's temporary directory to the host \texttt{outputs/} directory via
+\texttt{docker cp}. A final panel reports the scenario name, the number of data points produced,
+the batch aggregate value (for example, the Pearson correlation coefficient), and the paths to
+the generated \gls{csv}, PNG, and \gls{json} summary files. If the job terminates with an error,
+a failure panel instead shows the last log lines from the container process.
+
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{The Distributed \glsentryshort{csv} Processor}
+\label{sec:csv-processor}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Overview}
+\label{subsec:cap4-overview-2}
+
+The \gls{csv} processor (\texttt{scripts/csv\_processor.py}) is the core distributed computation
+module. It is submitted to the Spark cluster as a PySpark application \parencite{sparkpysparkdocs}
+via the \texttt{run\_csv\_processor.sh} wrapper script and executes entirely within the Docker
+cluster. The processor reads the input \gls{csv}, applies the MapReduce paradigm to extract
+per-entity metrics and per-experiment x-variable values, computes the batch-level aggregate, and
+writes three output artefacts: an aggregated \gls{csv}, a scatter plot image, and a \gls{json}
+summary.
+
+\subsection{Scenario Configuration Resolution}
+\label{subsec:cap4-scenario-configuration-resolution}
+
+Before any data is read, the processor resolves the scenario configuration by following a
+three-level priority order:
+
+\begin{enumerate}
+    \item The \texttt{--scenario-config} command-line argument, if provided and the file exists;
+    \item The default container path \texttt{/opt/spark/scenarios/}, if the folder exists;
+\end{enumerate}
+
+In normal operation, the \gls{cli} module injects the analyst-selected \gls{yaml} content
+directly into the container via a Python one-liner piped through \texttt{docker compose exec},
+bypassing potential bind-mount overlay limitations that can prevent the volume-mounted
+\texttt{scenarios/} directory from being writable inside the container.
+
+\subsection{Spark Ingestion and Validation}
+\label{subsec:cap4-spark-ingestion-and-validation}
+
+A \texttt{SparkSession} is created with the application name derived from the scenario name. The
+input \gls{csv} is loaded using Spark's native \gls{csv} reader with schema inference enabled,
+configured for single-line payload parsing and permissive mode (malformed rows are silently
+skipped rather than causing the job to abort). Immediately after loading, the column set is
+validated against the required schema; missing columns cause the job to abort with a descriptive
+error message.
+
+After validation, a base DataFrame is constructed by selecting only the three columns required
+for processing: \texttt{experiment} (cast to long integer), \texttt{frame} (cast to double), and
+\texttt{payload} (cast to string). Rows with null experiment values are filtered out, and the
+DataFrame is repartitioned to the configured partition count to distribute work across the four
+available Spark workers.
+
+\subsection{Distributed Map Phase}
+\label{subsec:map-phase}
+
+The map phase is implemented using Spark's \texttt{mapPartitions} transformation, which applies a
+Python function to each \gls{rdd} partition independently on the worker node that holds that
+partition \parencite{zaharia2012rdd}. This design amortises per-row Python call overhead across
+the entire partition, rather than invoking a separate function for each individual row.
+
+The partition function is constructed by a factory that captures the x and y variable
+configurations in a closure, which is serialised and broadcast to each Spark executor at job
+dispatch time. Within each partition the function proceeds as follows:
+
+\begin{enumerate}
+    \item It parses the \texttt{payload} string for each row, supporting both Python-literal-style
+          dictionaries (\texttt{ast.literal\_eval}) and strict \gls{json}.
+    \item It extracts the entity identifier, side (blue or red), name, and type from the parsed
+          payload.
+    \item It checks whether the entity matches the selector defined in the x or y variable
+          configuration by side, type substring, and optional name substring.
+    \item If matched, it extracts the target field value by traversing the nested payload
+          dictionary using a dot-notation path. The special path \texttt{"frame"} returns the
+          row's frame number directly, enabling survival-time computation via \texttt{max}
+          aggregation.
+    \item It updates a partition-local dictionary with the extracted value, applying the
+          configured frame-aggregation strategy (\texttt{max}, \texttt{min}, \texttt{last}, or
+          \texttt{first}) across successive rows sharing the same entity and experiment key.
+\end{enumerate}
+
+At the end of each partition the function yields two items: the partial x-variable dictionary and
+the partial y-variable dictionary.
+
+\subsection{Reduce Phase and Output Generation}
+\label{subsec:cap4-reduce-phase-and-output-generation}
+
+The partial dictionaries from all partitions are collected on the Spark driver via a single
+\texttt{collect()} call. The driver iterates over all collected items and merges them using the
+same aggregation logic applied within partitions, producing two global dictionaries: one for x
+and one for y. The two dictionaries are then joined into a tidy output DataFrame by matching
+experiment identifiers, and also entity keys when the observation scope is \texttt{per\_entity}.
+Experiments for which either variable could not be extracted are excluded from the output.
+
+The batch-level aggregate is computed from the output DataFrame according to the type specified in
+the scenario configuration:
+
+\begin{itemize}
+    \item Pearson correlation: yields a coefficient $r \in [-1, +1]$ between the x and y
+          columns, appended as an additional column in the output \gls{csv}.
+    \item Mean of y: computes the arithmetic mean of all y observations.
+    \item Count of y: counts the total number of y observations.
+    \item Scatter-only: produces no numeric aggregate; only the scatter plot is generated.
+\end{itemize}
+
+Three output artefacts are written to a temporary directory inside the container:
+
+\begin{itemize}
+    \item An aggregated \gls{csv} containing one row per (experiment, entity) pair with the
+          extracted x and y values and, for Pearson correlation, the batch-level coefficient
+          appended as an additional column.
+    \item A scatter plot image (\texttt{.png}) displaying the x variable on the horizontal axis
+          and the y variable on the vertical axis, with one point per data row.
+    \item A \gls{json} summary file containing the scenario name, input path, output paths,
+          number of data points, and the aggregate value with its type and any reason for a null
+          result.
+\end{itemize}
+
+After the Spark job finishes, the \gls{cli} module copies these artefacts from the container's
+temporary directory to the host \texttt{outputs/} directory via \texttt{docker cp}, making them
+accessible outside the Docker environment.
+
+Figure~\ref{fig:proc-flow} summarises the distributed processing pipeline.
+
+\begin{figure}[htbp]
+\centering
+\scalebox{0.70}{%
+\begin{tikzpicture}[x=1cm, y=1cm]
+
+%% Plain-text labels inside TikZ (no \gls to avoid hyperref/pgf conflict)
+\node[lcio]   (s)   at (0,  0.0) {Start};
+\node[lcproc] (p1)  at (0, -1.4) {Resolve scenario config (YAML or built-in)};
+\node[lcproc] (p2)  at (0, -2.8) {Initialise SparkSession};
+\node[lcproc] (p3)  at (0, -4.2) {Read CSV; validate column schema};
+\node[lcproc] (p4)  at (0, -6.0)
+    {Select experiment, frame, payload; repartition};
+
+%% Map phase
+\node[lcproc,fill=blue!15] (map) at (0, -8.2)
+    {Map phase (\texttt{mapPartitions})\\
+     Per partition: parse payload $\to$ match selector\\
+     $\to$ extract field $\to$ update x/y dicts};
+
+\node[lcproc] (p5) at (0, -10.4)
+    {Collect partial dicts on driver (\texttt{collect()})};
+
+%% Reduce phase
+\node[lcproc,fill=orange!15] (red) at (0,-12.0)
+    {Reduce phase (driver):\\
+     Merge partial x/y dicts $\to$ global x, y};
+
+\node[lcproc] (p6) at (0,-13.8) {Join x and y $\to$ output DataFrame};
+\node[lcproc] (p7) at (0,-15.4)
+    {Compute batch aggregate (Pearson\,/\,mean\,/\,count)};
+\node[lcproc] (p8) at (0,-17.0)
+    {Write: aggregated CSV, scatter plot, JSON summary};
+\node[lcio]   (e)  at (0,-18.6) {End};
+
+%% Arrows
+\draw[ultra thick,->,>=Stealth] (s)   -- (p1);
+\draw[ultra thick,->,>=Stealth] (p1)  -- (p2);
+\draw[ultra thick,->,>=Stealth] (p2)  -- (p3);
+\draw[ultra thick,->,>=Stealth] (p3)  -- (p4);
+\draw[ultra thick,->,>=Stealth] (p4)  -- (map);
+\draw[ultra thick,->,>=Stealth] (map) -- (p5);
+\draw[ultra thick,->,>=Stealth] (p5)  -- (red);
+\draw[ultra thick,->,>=Stealth] (red) -- (p6);
+\draw[ultra thick,->,>=Stealth] (p6)  -- (p7);
+\draw[ultra thick,->,>=Stealth] (p7)  -- (p8);
+\draw[ultra thick,->,>=Stealth] (p8)  -- (e);
+
+\end{tikzpicture}%
+}
+\caption[Distributed processing pipeline of the CSV processor.]{Distributed processing pipeline of the \gls{csv} processor
+         (\texttt{scripts/csv\_processor.py}). The map phase runs in parallel across
+         the six Spark worker containers; the reduce phase executes on the Spark master.}
+\label{fig:proc-flow}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Module Integration}
+\label{sec:integration}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Figure~\ref{fig:integration} presents the data-flow relationships between the two modules and the
+external systems they interact with. The \gls{cli} module is the sole point of contact between
+the analyst and the system; it drives the execution of the processing module as container commands
+and manages all data movement between the host and the Docker cluster.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1cm, y=1cm,
+  extb/.style={lcblock, fill=yellow!12, draw=black!60},
+  modb/.style={lcblock, fill=blue!10},
+  clust/.style={lcblock, fill=orange!10, text width=4.8cm, minimum height=2.0cm},
+]
+
+%% Analyst
+\node[extb] (analyst) at (-5.8, 0) {Analyst};
+
+%% CLI module
+\node[modb] (cli) at (0, 0)
+    {CLI Module\\\texttt{cli.py}};
+
+%% Host filesystem
+\node[extb] (fs) at (0, 3.2)
+    {Host filesystem\\\texttt{inputs/}\quad\texttt{outputs/}\\\texttt{scenarios/}};
+
+%% Spark cluster
+\node[clust] (cluster) at (5.8, 0)
+    {Spark Cluster (Docker)\\\texttt{spark-master}\\
+     \texttt{spark-worker-1..6}\\
+     \texttt{hdfs-datanode-1..4}};
+
+%% CSV processor (inside cluster)
+\node[modb] (proc) at (5.8, -3.0)
+    {CSV Processor\\\texttt{csv\_processor.py}};
+
+%% Arrows
+\draw[lcarr] (analyst.east) --
+    node[above,font=\scriptsize]{prompts} (cli.west);
+\draw[lcarr] (cli.north) --
+    node[right,font=\scriptsize]{read\,/\,write} (fs.south);
+\draw[lcarr] (cli.east) --
+    node[above,font=\scriptsize]{YAML + CSV} (cluster.west);
+\draw[lcarr] (cluster.west) --
+    node[below,font=\scriptsize]{results} (cli.east);
+\draw[lcarr] (cluster.south) --
+    node[right,font=\scriptsize]{executes} (proc.north);
+
+\end{tikzpicture}
+\caption[AeroSOuDA local cluster data-flow diagram.]{Data-flow integration diagram of the \gls{aerosouda} local cluster modules.}
+\label{fig:integration}
+\end{figure}
+
+The analyst places pre-existing \gls{csv} simulation result files in the \texttt{inputs/}
+directory on the host filesystem. The \gls{cli} injects the analyst-selected \gls{yaml} scenario
+configuration directly into the \texttt{spark-master} container and uploads the input \gls{csv}
+to \gls{hdfs}, then submits the processing job by executing \texttt{run\_csv\_processor.sh}
+inside the container.
+
+The job runs on the local Spark cluster: the six worker containers process partitions of the
+input \gls{csv} in parallel during the map phase, yielding partial x and y aggregation
+dictionaries to the master, which executes the reduce phase and writes the output artefacts to a
+temporary directory. The \gls{cli} then copies the artefacts from the container to the host
+\texttt{outputs/} directory via \texttt{docker cp} and presents the results to the analyst.
+
+This end-to-end flow implements the three-stage pipeline proposed in Chapter~3 distributed
+storage (via \gls{hdfs}), parallel metric extraction (MapReduce via PySpark),
+and analyst-facing result delivery (via the \gls{cli}) in a self-contained, locally deployable
+form that validates the proposed \gls{aerosouda} architecture before its deployment on a remote
+virtual machine, as described in Chapter~5.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{HDFS Integration}
+\label{sec:hdfs-integration}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{The Storage--Compute Separation Principle}
+\label{subsec:cap4-the-storage-compute-separation-principle}
+
+A fundamental design question in distributed computing is how to separate the
+storage layer where data resides from the compute layer where data is
+processed.  In the \gls{aerosouda} prototype, the compute layer is provided by Apache Spark
+and the storage layer by \gls{hdfs}.
+
+The cluster is configured with four DataNode containers and six Spark worker containers,
+providing block replication across DataNodes with a replication factor of two and
+distributing compute work across six parallel executors.  This configuration was used
+for both the local proof-of-concept tests and the remote cluster evaluation described in
+Chapter~5 and Chapter~6.
+
+\subsubsection{Full Interaction Protocol}
+\label{subsubsec:interaction-protocol}
+
+When the \gls{cli} submits a job, the following sequence of interactions takes place between
+the cluster entities:
+
+\begin{sloppypar}
+\begin{enumerate}
+    \item Job submission.  The \gls{cli} runs
+          \texttt{docker compose exec spark-master spark-\allowbreak{}submit ...}, which spawns the driver
+          process on the master container.
+
+    \item HDFS metadata query.  The driver opens a Hadoop \texttt{FileSystem} client
+          and sends an \gls{rpc} to the NameNode on port~9000: ``what blocks does
+          \texttt{results.csv} have, and on which DataNode are they stored?''
+
+    \item NameNode response.  The NameNode consults its in-memory namespace and
+          replies with the block identifiers and the DataNode address.  This is pure metadata;
+          no data bytes pass through the NameNode.
+
+    \item Resource allocation.  The driver requests executor slots from the master.
+          The master checks its worker registry and confirms which slots are free, then
+          instructs the workers to launch executor processes.
+
+    \item Task dispatch.  The master sends \texttt{LaunchTask} \gls{rpc} messages to
+          the workers, assigning each a set of partitions to process.
+
+    \item Block fetch.  Each worker's Hadoop client opens a direct TCP
+          connection to the DataNode and streams the raw bytes of its assigned partition.
+          No data passes through the master or the NameNode.
+
+    \item MapPartitions execution.  The worker executes the
+          \texttt{\_aggregate\_partition} function on its partition iterator entirely
+          locally, with no network communication and builds a partition-local
+          \texttt{(x\_local, y\_local)} accumulator dictionary.
+
+    \item Result collection.  The \texttt{collect()} call transfers all partial
+          dictionaries from the workers to the driver over the Spark shuffle channel.
+          Because each dictionary has at most one entry per experiment, the transferred data
+          volume is $O(E)$ where $E$ is the number of experiments, not $O(N)$ where $N$ is
+          the total number of rows.
+
+    \item Reduce phase.  The driver merges all partial dictionaries, builds the
+          output table, computes the batch aggregate, and writes the three output
+          artefacts to a temporary directory inside the master container.
+
+    \item Completion reporting.  Workers acknowledge task completion to the master,
+          which updates its slot availability.
+
+    \item Output retrieval.  The \gls{cli} issues \texttt{docker cp} to copy the
+          output files from the master container to the host \texttt{outputs/} directory.
+\end{enumerate}
+\end{sloppypar}
+
+Two background protocols run concurrently throughout a job: Spark worker heartbeats to the
+master (every ten seconds, confirming executor liveness) and DataNode heartbeats to the
+NameNode (every three seconds, confirming block availability).  Failure to deliver three
+consecutive heartbeats causes the master to mark the worker as lost and reschedule its
+pending tasks.
+
+The interplay between the two systems is further mediated by the Hadoop client libraries bundled with
+the \texttt{apache/spark} image.  In a multi-node cluster, Spark's data
+locality scheduler can prefer tasks on workers that co-reside with a DataNode holding the
+required blocks, reducing network traffic.  In the local Docker prototype all containers share
+the same host machine, so locality is always ``RACK\_LOCAL'' (same rack, different process) at
+best, but the architecture correctly prepares for a future multi-node deployment.
+
+\subsection{HDFS Configuration Files}
+\label{subsec:hdfs-conf}
+
+The \texttt{conf/} directory contains four files that configure both \gls{hdfs} and Spark
+layers:
+
+\begin{sloppypar}
+\texttt{conf/\allowbreak{hadoop.env}.}
+An environment-variable file loaded by the \texttt{bde2020/\allowbreak{}hadoop-namenode} and
+\texttt{bde2020/\allowbreak{}hadoop-datanode} images via \texttt{env\_file} in the Docker Compose
+definition.  Key entries:
+\begin{itemize}
+    \item \texttt{CORE\_CONF\_fs\_defaultFS=hdfs://namenode:9000}, sets the default
+          filesystem URI for Hadoop processes running inside the container.
+    \item \texttt{HDFS\_CONF\_dfs\_replication=2}, sets the block replication factor;
+          two is appropriate for a four-DataNode cluster, providing one redundant copy per
+          block while remaining below the number of available DataNodes.
+    \item \texttt{HDFS\_CONF\_dfs\_permissions\_enabled=false}, disables \gls{hdfs}
+          user-permission enforcement, simplifying the local development workflow.
+    \item \texttt{HDFS\_CONF\_dfs\_blocksize=134217728}, sets the block size to
+          $128 \times 2^{20}$ bytes.  The block size is the unit of storage, not a
+          file-size limit.  A 66\,MB \gls{csv} occupies one block; a 500\,MB file is
+          split into four blocks distributed across DataNode containers.
+          The only practical file-size constraint is the total DataNode disk capacity.
+\end{itemize}
+
+\texttt{conf/core-site.xml.}
+The standard Apache Hadoop core configuration file, understood by all Hadoop
+components and clients.  It is bind-mounted inside every Spark container at
+\texttt{/etc/hadoop/core-site.xml}, and the environment variable
+\texttt{HADOOP\_CONF\_DIR=/etc/hadoop} is set in each Spark service.  This causes the Hadoop
+client libraries embedded in the Spark distribution to load this file at startup, making the
+\texttt{hdfs://namenode:9000} URI resolvable from any Spark executor.  The file also sets
+\texttt{dfs.client.use.\allowbreak{}datanode.\allowbreak{}hostname=true}, instructing the Hadoop client to resolve
+DataNode addresses by container hostname rather than by IP address, which is required for
+correct routing inside Docker bridge networks.
+
+\texttt{conf/hdfs-site.xml.}
+The standard Hadoop \gls{hdfs} configuration file, bind-mounted into the \gls{hdfs}
+containers.  It reiterates the block size, replication factor, and DataNode hostname settings
+in the XML format expected by the NameNode and DataNode processes.
+
+\texttt{conf/\allowbreak{spark-defaults.conf}.}
+The Spark-wide configuration file, bind-mounted into all Spark containers at
+\texttt{/opt/spark/conf/\allowbreak{}spark-defaults.conf}.  Beyond the partition and memory tuning
+parameters, two entries support the \gls{hdfs} integration:
+\begin{itemize}
+    \item \texttt{spark.executorEnv.\allowbreak{}PYTHONPATH=/opt/spark/scripts}, adds the volume-mounted
+          scripts directory to the Python path of every executor worker, making the
+          \texttt{processor/} package importable without \texttt{--py-files} packaging.
+    \item \texttt{spark.eventLog.dir=\allowbreak{}file:///opt/spark/events}, directs event logs to the
+          bind-mounted \texttt{events/} directory on the host, which the Spark History Server
+          uses to reconstruct completed job timelines.
+\end{itemize}
+
+A deliberate design decision is that \texttt{spark.hadoop.fs.defaultFS} is not set
+globally in \texttt{spark-defaults.conf}.  If it were, every Spark file reference including
+the Python script path in \texttt{spark-submit} would be resolved against \gls{hdfs},
+breaking local-path references.  Instead, the \texttt{run\_csv\_processor.sh} wrapper script
+injects the flag \texttt{spark.hadoop\allowbreak.fs.defaultFS=\allowbreak hdfs://namenode:9000}
+only when the input
+path begins with \texttt{hdfs://}.  For local input paths it instead injects
+\texttt{spark.hadoop.fs.defaultFS=\allowbreak file:///} to override any inherited \gls{hdfs} default.
+\end{sloppypar}
+
+\subsection{CLI Integration with HDFS}
+\label{subsec:cap4-cli-integration-with-hdfs}
+
+\gls{hdfs} is now a hard dependency of the \gls{cli} pipeline; there is no bind-mount
+fallback.  The \texttt{check\_hdfs()} function (step~3 of the \gls{cli} pipeline) verifies
+at startup that the \texttt{namenode} container is in running state.  If it is not, the
+\gls{cli} exits immediately with guidance on how to start the full cluster.
+
+A note on the data paths is warranted here.  The \gls{csv} input and the \gls{yaml} scenario
+configuration are delivered to the cluster by two entirely different mechanisms:
+
+\begin{itemize}
+    \item The \gls{csv} file is delivered to \gls{hdfs}: the \gls{cli} uses
+          \texttt{docker cp} to copy it into the \texttt{namenode} container as a temporary
+          staging file, then executes \texttt{hdfs dfs -put -f} from within that container
+          to transfer the data into \gls{hdfs} proper (i.e.\ into the DataNode's block
+          store).  The NameNode never holds the data itself; it only records the block
+          locations.  The resulting \gls{hdfs} \gls{uri}
+          (\texttt{hdfs://namenode:9000/inputs/<filename>}) is passed to the Spark job,
+          which reads the blocks directly from the DataNode.
+    \item The \gls{yaml} scenario configuration bypasses \gls{hdfs} entirely.
+          Because the YAML file is a small configuration document (typically under one
+          kilobyte) rather than data, sending it through \gls{hdfs} would be unnecessary
+          overhead.  Instead, the \gls{cli} injects its content directly into the
+          \texttt{spark-master} container's local filesystem via \texttt{docker~compose~exec}
+          using Python's standard input stream.
+          The YAML file is written to \texttt{/tmp/} on the master and passed to the Spark
+          job as a local path argument.
+\end{itemize}
+
+This separation matters for the data-flow diagram: the \gls{csv} path involves the full
+HDFS upload pipeline (host $\to$ namenode container $\to$ \gls{hdfs} DataNode), whereas
+the YAML path is a direct host-to-container injection.
+
+The output artefacts follow a third, simpler path: the Spark driver (the Python process
+running on \texttt{spark-master}) writes the aggregated \gls{csv}, scatter plot, and
+\gls{json} summary to a temporary directory inside the master container.  After the Spark
+job completes, the \gls{cli} issues a single \texttt{docker cp} command to pull all three
+files from the container to the host \texttt{outputs/} directory.  No worker container
+is involved in output delivery.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{MapReduce Strategy: Rationale for \texttt{mapPartitions}}
+\label{sec:mapreduce-rationale}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{The Payload Parsing Constraint}
+\label{subsec:cap4-the-payload-parsing-constraint}
+
+A central design constraint of the distributed processor is that the \texttt{payload} column
+of every simulation row contains a raw Python-literal string representation of a nested
+dictionary a format generated by the \gls{asa} Python \gls{api} and not directly parseable
+by any native Spark \gls{sql} function.  Strict \gls{json} parsing (\texttt{from\_json}) fails
+because \gls{asa} payloads use single-quoted string literals, which are valid Python but not
+valid \gls{json}.  This means that payload parsing must occur in Python, and the question of
+which Spark \gls{api} to use reduces to the question of how to invoke Python parsing with
+minimum overhead.
+
+\subsection{Candidate APIs and Their Limitations}
+\label{subsec:cap4-candidate-apis-and-their-limitations}
+
+Several Spark primitives are conceptually applicable:
+
+DataFrame \texttt{groupBy + \texttt{agg}.} This is the natural choice for
+structured data and native Spark functions.  However, it requires that payload parsing be
+expressed as a Spark \gls{sql} \gls{udf}, which introduces one Python/\gls{jvm}
+serialisation crossing per row.  Moreover, \texttt{groupBy} triggers a full shuffle of the
+dataset across the network, which is unnecessary for this workload: the aggregation is local
+within each simulation run (experiment), not a global join.
+
+\texttt{RDD.map.} A row-level Python \gls{udf} avoids the schema inference problem
+but incurs one Python/\gls{jvm} boundary crossing per row.  For a batch of four million rows
+(a typical Quick-Reaction simulation batch), this results in four million individual pickling
+operations, each transferring one row from the \gls{jvm} executor to the Python process and
+back.  The overhead has been consistently measured to be substantial: \gls{aws} prescriptive
+guidance recommends avoiding row-level Python \glspl{udf} in favour of vectorised alternatives
+wherever possible \parencite{awsudf2023}.
+
+Pandas/Arrow \gls{udf}. Apache Arrow \parencite{apachearrow2016} provides a
+zero-copy columnar memory format that eliminates the pickling step for numeric and string
+columns, reducing boundary-crossing overhead by batching rows.  However, the bottleneck in this
+workload is not serialisation but computation: \texttt{ast.literal\_eval} is an inherently
+sequential Python parser, and the subsequent nested-dictionary traversal and entity-selector
+matching require Python control flow that cannot be vectorised into Arrow operations.
+Consequently, an Arrow \gls{udf} would improve serialisation cost but leave the dominant
+per-row Python computation unchanged.
+
+\texttt{RDD.aggregateByKey.} This operator supports map-side combination, which
+would partially replicate the local-accumulation benefit of \texttt{mapPartitions}.  However,
+it requires a preliminary \texttt{map} call to emit \texttt{(key, row)} pairs adding one
+extra Python crossing per row to extract the experiment identifier and the
+\texttt{seqFunc}/\texttt{combFunc} \gls{api} is less expressive than a general closure,
+making it difficult to implement the frame-indexed \texttt{(frame, value)} accumulation that
+the processor requires.
+
+\texttt{foreachPartition.} This operator offers the same partitioned invocation
+semantics as \texttt{mapPartitions} but cannot return values to the driver; it is intended for
+side effects such as writing to external storage.  It is therefore unsuitable for collecting
+partial aggregation dictionaries.
+
+\subsection{Why was \texttt{mapPartitions} chosen?}
+\label{subsec:cap4-why-was-mappartitions-chosen}
+
+\texttt{RDD.mapPartitions} invokes the Python processing function once per partition
+rather than once per row.  The function receives an iterator over all rows in a partition,
+processes them in a tight Python loop, and yields a small result (one or two dictionaries,
+one entry per experiment) when the iteration is complete.  This design offers five decisive
+advantages for this workload:
+
+\begin{enumerate}
+    \item Amortised crossing overhead. With $N = 16$ partitions and $M = 4 \times 10^6$
+          rows, \texttt{mapPartitions} produces $N = 16$ Python/\gls{jvm} crossings; \texttt{.map()}
+          would produce $M = 4 \times 10^6$ a factor of $M/N = 250\,000$ fewer crossings.
+
+    \item No shuffle. The partial dictionaries yielded by the map phase are tiny: at
+          most one entry per experiment per partition.  The entire reduce phase operates on
+          data that is orders of magnitude smaller than the input.
+
+    \item Single closure serialisation per executor. The scenario configuration
+          (entity selectors, field paths, aggregation types) is captured in a Python closure
+          that is serialised once when Spark dispatches the task to each executor, not once
+          per row.
+
+    \item Expressive accumulation state. The partition function maintains a
+          \texttt{dict} of \texttt{(frame, value)} pairs that supports arbitrary
+          frame-aggregation strategies (\texttt{max}, \texttt{min}, \texttt{last},
+          \texttt{first}) without the constraints imposed by the \texttt{aggregateByKey}
+          \gls{api}.
+
+    \item Academic precedent. Zaharia et al.\ \parencite{zaharia2012rdd} specifically
+          identify stateful partition-level computation as a primary design use case for
+          \glspl{rdd}, distinguishing it from the element-wise \texttt{map} transform.
+\end{enumerate}
+
+The choice of \texttt{mapPartitions} therefore follows directly from the payload parsing
+constraint: given that Python computation is mandatory and the per-row cost dominates, the
+only strategy that reduces Python invocations without introducing an unnecessary shuffle is
+\texttt{mapPartitions}.  This conclusion is independent of future improvements to Arrow
+serialisation or Spark's Python execution model, because the bottleneck is computation, not
+transport.
+
+The remote deployment of \gls{aerosouda}, including the two-component architecture,
+the \gls{ssh}/\gls{sftp} communication design, and the end-to-end data flow, is
+described in full detail in Chapter~5.

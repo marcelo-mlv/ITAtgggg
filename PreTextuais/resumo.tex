@@ -1,4 +1,33 @@
-Aqui começa o resumo do referido trabalho. Não tenho a menor idéia do que colocar aqui. Sendo assim, vou inventar. Lá vai: Este trabalho apresenta uma metodologia de controle de posição das juntas passivas de um manipulador subatuado de uma maneira subótima. O termo subatuado se refere ao fato de que nem todas as juntas ou graus de liberdade do sistema são equipados com atuadores, o que ocorre na prática devido a falhas ou como resultado de projeto. As juntas passivas de manipuladores desse tipo são indiretamente controladas pelo movimento das juntas ativas usando as características de acoplamento da dinâmica de manipuladores. A utilização de redundância de atuação das juntas ativas permite a minimização de alguns critérios, como consumo de energia, por exemplo.
-Apesar da estrutura cinemática de manipuladores subatuados ser idêntica a do totalmente atuado, em geral suas caraterísticas dinâmicas diferem devido a presença de juntas passivas. Assim, apresentamos a modelagem dinâmica de um manipulador subatuado e o conceito de índice de acoplamento. Este índice é utilizado na sequência de controle ótimo do \mbox{manipulador}.
-A hipótese de que o número de juntas ativas seja maior que o número de
-passivas  $(n_{a} > n_{p})$  permite o controle ótimo das juntas passivas, uma vez que na etapa de controle destas há mais entradas (torques nos atuadores das juntas ativas), que elementos a controlar (posição das juntas passivas). 
+Ambientes de simulação aeroespacial em larga escala geram volumes substanciais de dados
+brutos cujo pós-processamento representa um gargalo crítico nos fluxos de trabalho analíticos.
+Quando lotes de simulação são processados sequencialmente em uma única máquina, o tempo necessário
+para derivar métricas significativas e valores agregados cresce proporcionalmente ao número
+de execuções, limitando a agilidade analítica necessária para o Planejamento Baseado em
+Capacidades em contextos de defesa.
+
+Este trabalho propõe, implementa e avalia uma infraestrutura de computação distribuída projetada
+para acelerar o estágio de pós-processamento de simulações aeroespaciais baseadas em cenários,
+produzidas pelo projeto ASA, desenvolvido no Instituto de Estudos Avançados da Força Aérea
+Brasileira. O projeto, intitulado AeroSOuDA, combina o Apache Spark (via PySpark) para extração
+paralela de métricas com o Hadoop Distributed File System (HDFS) para armazenamento escalável
+com localidade de dados, expondo uma interface de linha de comando interativa por meio da qual
+analistas definem funções de métrica e de agregação antes do envio do trabalho, sem exigir
+conhecimentos computacionais elevados.
+
+Dois modos de implantação são apresentados: um cluster local via Docker Compose para
+prototipagem, e uma implantação em máquina virtual remota acessada por um cliente
+Python via SSH e SFTP. A avaliação experimental em dois cenários analíticos sobre dois
+conjuntos de dados independentes (1,3\,GB e 1,5\,GB, respectivamente) demonstra speedups de
+$2{,}86\times$ e $3{,}14\times$ com quatro executores em um cluster de host único,
+correspondendo a eficiências paralelas de $71{,}4\%$ e $78{,}6\%$. Um experimento de
+escalabilidade com um, dois e quatro executores no conjunto maior confirma que a arquitetura
+escala beneficamente, atingindo $93{,}4\%$ de eficiência com dois executores. O overhead de
+comunicação SSH permanece inferior a $1\%$ do tempo total de execução em ambas as campanhas,
+confirmando a viabilidade do modelo de implantação remota.
+
+Os resultados estabelecem que o paradigma MapReduce, implementado via PySpark e HDFS,
+fornece uma base prática e escalável para o pós-processamento distribuído de lotes de
+simulação em um contexto aeroespacial de defesa, reduzindo o tempo de execução em
+$65$--$68\%$ em relação ao referencial sequencial, mantendo o conjunto de dados bruto
+integralmente no servidor. O speedup medido cresce com o tamanho do conjunto de dados,
+consistente com as previsões da Lei de Amdahl derivadas do experimento de escalabilidade.

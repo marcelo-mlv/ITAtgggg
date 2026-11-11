@@ -1,0 +1,499 @@
+% ─────────────────────────────────────────────────────────────────────────────
+%  Chapter 5 — Remote Cluster Deployment
+% ─────────────────────────────────────────────────────────────────────────────
+
+% TikZ styles for this chapter's flowcharts
+% NOTE: \gls{} is intentionally NOT used inside TikZ node labels — hyperref
+%       link anchors conflict with pgf boxes and \scalebox.
+\tikzset{
+  rmproc/.style={rectangle, rounded corners=3pt, draw=black!70, fill=blue!8,
+                 text width=5.8cm, minimum height=0.75cm, text centered,
+                 font=\small, inner sep=5pt},
+  rmdec/.style={diamond, aspect=2.4, draw=black!70, fill=orange!15,
+                text width=3.0cm, minimum height=0.75cm, text centered,
+                font=\small, inner sep=2pt},
+  rmio/.style={ellipse, draw=black!70, fill=green!20,
+               text width=2.6cm, minimum height=0.7cm,
+               text centered, font=\small, inner sep=3pt},
+  rmside/.style={rectangle, rounded corners=3pt, draw=black!60, fill=gray!10,
+                 text width=4.0cm, minimum height=0.75cm, text centered,
+                 font=\small, inner sep=5pt},
+  rmblock/.style={rectangle, rounded corners=4pt, draw=black!70,
+                  text width=3.6cm, minimum height=1.1cm, text centered,
+                  font=\small, inner sep=6pt},
+  rmclient/.style={rectangle, rounded corners=4pt, draw=black!70, fill=cyan!8,
+                   text width=4.5cm, minimum height=1.4cm, text centered,
+                   font=\small, inner sep=6pt},
+  rmvm/.style={rectangle, rounded corners=4pt, draw=black!70, fill=orange!10,
+               text width=4.5cm, minimum height=1.4cm, text centered,
+               font=\small, inner sep=6pt},
+  rmarr/.style={thick,->,>=Stealth},
+  rmssh/.style={thick,->,>=Stealth,dashed,blue!60},
+  rmsftp/.style={thick,->,>=Stealth,dotted,green!60!black},
+  rmline/.style={thick},
+}
+
+Chapter~4 validated the \gls{aerosouda} concept through a local cluster prototype running on a
+single workstation.  That prototype demonstrated that the proposed distributed MapReduce pipeline
+is technically feasible.  The natural next step is to extend the deployment model so that the
+Spark and \gls{hdfs} cluster runs on a dedicated remote server with more computational resources,
+while the analyst interacts with it from a lightweight client on their own machine without
+requiring Docker to be installed locally.
+
+This chapter describes the remote cluster deployment architecture, implemented in the
+\texttt{tg-cluster} repository.  The repository is split into two independent components:
+\texttt{cluster/}, the Docker Compose stack that runs on the remote \gls{vm},
+and \texttt{client/}, a Python-only \gls{cli} that runs on the analyst's machine and communicates
+with the \gls{vm} exclusively via \gls{ssh} and \gls{sftp}.
+
+The chapter is organized as follows.
+Section~\ref{sec:rm-overview} presents the two-component architecture and justifies the
+design decisions.
+Section~\ref{sec:rm-cluster} documents the \gls{vm} cluster configuration.
+Section~\ref{sec:rm-client} describes the remote client \gls{cli} and its eight-step pipeline.
+Section~\ref{sec:rm-ssh-sftp} explains the \gls{ssh}/\gls{sftp} communication design.
+Section~\ref{sec:rm-dataflow} presents the end-to-end data flow from the analyst's machine to
+the \gls{vm} cluster and back.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Architecture Overview}
+\label{sec:rm-overview}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Motivation for a Two-Component Design}
+\label{subsec:rm-motivation-two-component}
+
+The local cluster prototype from Chapter~4 requires the analyst to have Docker installed and to
+run the entire Spark and \gls{hdfs} stack on their own machine.  This is acceptable for
+development and testing but impractical for production use: simulation result \gls{csv} files
+can reach several gigabytes; a local workstation may lack the memory and processing cores to
+distribute such heavy workload effectively; and the cluster must be shut down and restarted
+each time the analyst switches computers.
+
+A remote cluster hosted on a \gls{vm} solves all three problems: the \gls{vm} can be provisioned
+with many cores and ample memory, it stores the simulation \gls{csv} files persistently on
+\gls{hdfs}, and it is accessible from any machine with an internet connection.  The analyst only
+needs Python and a handful of pure-Python dependencies on their laptop in order to run this
+repository. This project also includes in its \texttt{README} file a step-by-step guide to
+install said python dependencies.
+
+\subsection{Repository Structure}
+\label{subsec:rm-repository-structure}
+
+The \texttt{tg-cluster} repository is organized into two top-level directories:
+
+\begin{itemize}
+  \item \texttt{cluster/}, the Docker Compose stack intended to be deployed on the remote
+        \gls{vm}.  It contains the same Spark and \gls{hdfs} containers as the local cluster,
+        together with the processing scripts, scenario \gls{yaml} files, and all configuration
+        files.  Analysts clone this directory on the \gls{vm} and start it with
+        \texttt{make~up}.
+  \item \texttt{client/}, the analyst-side \gls{cli}.  It has no Docker dependency; its only
+        requirements are Python~3.8+ and the packages listed in \texttt{requirements.txt} (rich,
+        questionary, pyyaml, pandas, paramiko).  The analyst runs \texttt{python~cli.py} on their
+        laptop to initiate the full distributed pipeline on the remote \gls{vm}.
+\end{itemize}
+
+Figure~\ref{fig:rm-arch} illustrates the two-component architecture and the communication
+channels between them.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1cm, y=1cm]
+
+%% Client box
+\node[rmclient] (client) at (-4.5, 0)
+    {Analyst machine\\\texttt{client/cli.py}\\(Python only, no Docker)};
+
+%% VM box
+\node[rmvm] (vm) at (4.5, 0)
+    {Remote VM\\\texttt{cluster/} (Docker)\\Spark + HDFS};
+
+%% SSH arrow
+\draw[rmssh] (client.east) to[bend left=18]
+    node[above,font=\scriptsize]{SSH: job submission} (vm.west);
+
+%% SFTP arrow
+\draw[rmsftp] (vm.west) to[bend left=18]
+    node[below,font=\scriptsize]{SFTP: result files} (client.east);
+
+%% Client local files
+\node[rmblock, fill=cyan!5] (lcfiles) at (-4.5, -2.6)
+    {\texttt{scenarios/} (YAML)\\\texttt{outputs/} (results)};
+\draw[rmarr] (client.south) -- (lcfiles.north);
+
+%% VM HDFS
+\node[rmblock, fill=orange!5] (hdfs) at (4.5, -2.6)
+    {\texttt{HDFS /inputs/}\\\texttt{(simulation CSVs)}};
+\draw[rmarr] (vm.south) -- (hdfs.north);
+
+\end{tikzpicture}
+\caption[Two-component architecture of the AeroSOuDA remote deployment.]{Two-component architecture of the AeroSOuDA remote deployment.
+         Dashed blue arrows indicate SSH connections; dotted green arrows indicate SFTP
+         file transfers.  YAML scenario files reside on the analyst's machine; simulation
+         CSV files reside on the VM's HDFS.}
+\label{fig:rm-arch}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{The VM Cluster (\texttt{cluster/})}
+\label{sec:rm-cluster}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Container Configuration}
+\label{subsec:rm-container-configuration}
+
+The \texttt{cluster/docker-compose.yml} defines the same thirteen-container topology as the
+local cluster: one \gls{hdfs} NameNode, four \gls{hdfs} DataNodes, one Spark master, six Spark
+workers, and one Spark History Server.
+
+Whereas the local cluster is started by the analyst on
+their own workstation and torn down after each session, the \gls{vm} cluster is intended to run
+continuously.  Simulation result \gls{csv} files are uploaded to the \gls{hdfs} storage layer
+once and remain there for repeated analysis runs.
+
+\subsection{Persistent HDFS Storage}
+\label{subsec:rm-persistent-hdfs-storage}
+
+One of the main advantages of the remote deployment is that large \gls{csv} files are uploaded
+to the \gls{vm}'s \gls{hdfs} once and do not need to be retransferred for each analysis run.
+The simulation result files can be copied to the \gls{vm} via the Secure Copy Protocol
+(\texttt{scp}) (or a similar file transfer tool), then loaded into \gls{hdfs} with:
+
+\begin{verbatim}
+docker cp results.csv namenode:/tmp/results.csv
+docker exec namenode hdfs dfs -put /tmp/results.csv /inputs/
+\end{verbatim}
+
+After this one-time upload, any number of analysis runs with different \gls{yaml} scenario
+configurations can be performed without retransferring the \gls{csv}.
+
+\subsection{VM Setup}
+\label{subsec:rm-vm-setup}
+
+Deploying the cluster on a fresh \gls{vm} requires only Docker and Docker Compose.  The setup
+procedure is documented in \texttt{cluster/README.md} and consists of three steps:
+
+\begin{enumerate}
+  \item Install Docker Engine and the Compose plugin following the official Docker documentation.
+  \item Clone the \texttt{tg-cluster} repository and navigate to \texttt{cluster/}.
+  \item Run \texttt{make fix-perms \&\& make up} to fix volume permissions and start all
+        containers.
+\end{enumerate}
+
+The \gls{hdfs} web interface is available at \texttt{http://<VM\_IP>:9870} and the Spark web
+interface at \texttt{http://<VM\_IP>:8080}.  Both interfaces should be accessible from the
+analyst's machine if the \gls{vm} firewall allows \gls{tcp} connections on those ports.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{The Remote Client (\texttt{client/})}
+\label{sec:rm-client}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Overview}
+\label{subsec:rm-client-overview}
+
+The remote client (\texttt{client/cli.py}) is the analyst-facing entry point for the
+remote cluster deployment.  It provides the same interactive experience as the local \gls{cli}
+but replaces all Docker commands with \gls{ssh} and \gls{sftp} operations directed at the remote
+\gls{vm}.  The client has no Docker dependency; it uses the \texttt{paramiko} library
+\parencite{paramiko2024} for \gls{ssh} connectivity and the standard \texttt{pyyaml} and
+\texttt{rich} libraries for scenario management and terminal output.
+
+\subsection{Pipeline Flow}
+\label{subsec:rm-pipeline-flow}
+
+Figure~\ref{fig:rm-flow} presents the remote client pipeline. The pipeline is composed of eight
+sequential stages.
+
+\begin{figure}[p]
+\centering
+\scalebox{0.78}{%
+\begin{tikzpicture}[x=1cm, y=1cm]
+
+\node[rmio]   (start) at (0,  0.0) {Start};
+\node[rmproc] (wel)   at (0, -1.4) {1. Display welcome screen};
+\node[rmproc] (conn)  at (0, -2.8) {2. Prompt VM connection (IP, user, auth)};
+\node[rmproc] (ssh)   at (0, -4.2) {3. Connect via SSH (paramiko)};
+\node[rmproc] (hdfs)  at (0, -5.6) {4. List CSVs from VM HDFS via SSH};
+\node[rmproc] (pick)  at (0, -7.0) {5. Pick CSV + pick or create YAML scenario};
+\node[rmproc] (conf)  at (0, -8.4) {6. Confirm execution};
+\node[rmproc] (job)   at (0, -9.8) {7. Submit job via SSH; stream progress};
+\node[rmproc] (sftp)  at (0,-11.2) {8. SFTP: download results to local outputs/};
+\node[rmproc] (disp)  at (0,-12.6) {9. Display results};
+\node[rmio]   (end)   at (0,-14.0) {End};
+
+\draw[rmarr] (start) -- (wel);
+\draw[rmarr] (wel)   -- (conn);
+\draw[rmarr] (conn)  -- (ssh);
+\draw[rmarr] (ssh)   -- (hdfs);
+\draw[rmarr] (hdfs)  -- (pick);
+\draw[rmarr] (pick)  -- (conf);
+\draw[rmarr] (conf)  -- (job);
+\draw[rmarr] (job)   -- (sftp);
+\draw[rmarr] (sftp)  -- (disp);
+\draw[rmarr] (disp)  -- (end);
+
+\end{tikzpicture}%
+}
+\caption{Execution pipeline of the AeroSOuDA remote client (\texttt{client/cli.py}).}
+\label{fig:rm-flow}
+\end{figure}
+
+The stages of the pipeline are described as follows:
+
+\begin{enumerate}
+
+\item Welcome screen. A styled panel introduces the tool, identifies the
+      remote-de\-ploy\-ment context, and lists the pipeline steps.
+
+\item VM connection prompt. The client checks for a \texttt{.env} file in the
+      working directory containing the five connection variables: \texttt{SSH\_IP},
+      \texttt{SSH\_USERNAME}, \texttt{SSH\_PASSWORD}, \texttt{SSH\_PORT}, and
+      \texttt{VM\_CLUSTER\_PATH}.  If the file is present and all variables are
+      set, all connection parameters are loaded automatically and no prompt is shown.
+      Otherwise, the analyst is prompted interactively for the \gls{vm} \gls{ip} address,
+      \gls{ssh} username, authentication method (password or private key file path), port,
+      and cluster directory path.  The \texttt{.env} approach is the recommended workflow
+      for repeated use against the same cluster, as it eliminates repeated manual input.
+
+\item SSH connection. A \texttt{paramiko.SSHClient} is opened to the \gls{vm}.  The
+      connection module then issues a \texttt{docker ps} command over \gls{ssh} to verify that
+      the cluster containers (\texttt{spark-master}, \texttt{namenode}, DataNodes, and workers)
+      are running.  If any required container is absent, the pipeline exits with actionable
+      guidance.
+
+\item CSV listing from HDFS. The client issues the command
+      \texttt{docker exec namenode hdfs dfs -ls /inputs/} over \gls{ssh} and parses the output
+      to build a list of available \gls{csv} files together with their sizes.  This listing
+      reflects the current contents of the \gls{hdfs} storage layer on the \gls{vm}.
+
+\item CSV and scenario selection. The analyst selects one of the listed \gls{csv} files
+      and either loads a \gls{yaml} scenario from the local \texttt{scenarios/} directory or
+      creates a new one using the same guided wizard as the local \gls{cli}.
+
+\item Execution confirmation. A summary panel displays the selected \gls{csv} name,
+      the \gls{vm} host, and the scenario configuration.  The analyst confirms before the job
+      is submitted.
+
+\item Job submission and monitoring. The client performs the following sub-steps:
+  \begin{enumerate}[label=\alph*.]
+    \item \gls{sftp}: upload the local \gls{yaml} scenario to \texttt{/tmp/} on the \gls{vm}.
+    \item \gls{ssh}: inject the \gls{yaml} into the \texttt{spark-master} container via
+          \texttt{docker exec}.
+    \item \gls{ssh}: execute \texttt{run\_csv\_processor.sh} inside \texttt{spark-master},
+          streaming \texttt{stdout} back through the \gls{ssh} channel.  Spark stage-progress
+          lines are parsed and displayed as a live progress bar on the analyst's terminal.
+    \item \gls{ssh}: copy output artefacts from the container to a temporary directory on the
+          \gls{vm} via \texttt{docker cp}.
+  \end{enumerate}
+
+\item Result transfer. The client uses \gls{sftp} to download all output files from
+      the \gls{vm}'s temporary directory to the local \texttt{outputs/} directory.  The three
+      output artefacts an aggregated \gls{csv}, a scatter plot image, and a \gls{json}
+      summary are saved locally on the analyst's machine.
+
+\item Results display. A final panel reports the scenario name, the number of data
+      points, the batch aggregate value, and the local paths of the output files.
+
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{SSH and SFTP Communication Design}
+\label{sec:rm-ssh-sftp}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{The \texttt{RemoteCluster} Class}
+\label{subsec:rm-remotecluster-class}
+
+\begin{sloppypar}
+All \gls{ssh} and \gls{sftp} operations are encapsulated in the
+\texttt{cli/remote.py::\allowbreak{}RemoteCluster} class.  On \texttt{connect()}, it opens a single
+\texttt{paramiko.SSHClient} connection to the \gls{vm} and derives an \texttt{SFTPClient}
+from the same underlying transport, minimizing the number of \gls{tcp} handshakes.
+\end{sloppypar}
+
+For job execution, \texttt{run\_job()} opens a pseudo-terminal channel on the existing transport.
+The pseudo-terminal is required because the \texttt{docker compose exec} command on the \gls{vm}
+buffers output differently when it detects that its standard output is not a \gls{tty}.
+Allocating a pseudo-terminal forces line-buffered output, which is necessary for the stage-progress
+lines to appear in real time on the analyst's terminal.
+
+\subsection{Authentication}
+\label{subsec:rm-authentication}
+
+The \texttt{RemoteCluster} constructor accepts either a password or the path to an \gls{ssh}
+private key file.  When a key path is provided, \texttt{paramiko} loads the key with
+\texttt{para\-miko.\allowbreak{}RSAKey.\allowbreak{}from\_private\_key\_file()}.
+Both authentication methods are equivalent
+in security from \texttt{paramiko}'s perspective; using a private key is recommended for
+production deployments because it avoids storing or transmitting passwords.
+
+\subsection{Data Transfer Design}
+\label{subsec:rm-data-transfer-design}
+
+Three distinct data-transfer patterns are used in the pipeline:
+
+\begin{enumerate}
+  \item YAML upload (\gls{sftp} PUT): the analyst's local \gls{yaml} scenario file is
+        uploaded to \texttt{/tmp/aerosouda\_scenario.yaml} on the \gls{vm} filesystem, then
+        injected into the \texttt{spark-master} container via a Python one-liner piped through
+        \texttt{docker exec -i}.
+  \item Job output export (\gls{ssh} command): after the Spark job completes, the
+        output artefacts are copied from the container's temporary directory to a staging area on
+        the \gls{vm} filesystem via \texttt{docker cp}.
+  \item Result download (\gls{sftp} GET): the \gls{sftp} client iterates over the
+        staging directory and downloads each file to the local \texttt{outputs/} directory.
+\end{enumerate}
+
+This design avoids mounting any host directories into the Docker containers on the \gls{vm}:
+all file movements cross container boundaries via \texttt{docker cp}, and all client--\gls{vm}
+movements use \gls{sftp}.  The \gls{csv} files themselves are never transferred from the
+\gls{vm} to the client; only the small result artefacts (aggregated \gls{csv}, scatter plot,
+\gls{json} summary) are downloaded.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{End-to-End Data Flow}
+\label{sec:rm-dataflow}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Figure~\ref{fig:rm-dataflow} presents the complete end-to-end data flow of the remote deployment
+from the analyst's perspective.
+
+\begin{figure}[htbp]
+\centering
+\scalebox{0.85}{%
+\begin{tikzpicture}[x=1cm, y=1cm,
+  anabox/.style={rectangle, rounded corners=3pt, draw=black!70, fill=cyan!8,
+                 text width=4.0cm, minimum height=0.9cm, text centered,
+                 font=\small, inner sep=5pt},
+  vmbox/.style={rectangle, rounded corners=3pt, draw=black!70, fill=orange!10,
+                text width=4.0cm, minimum height=0.9cm, text centered,
+                font=\small, inner sep=5pt},
+  cntbox/.style={rectangle, rounded corners=3pt, draw=black!70, fill=yellow!10,
+                 text width=3.5cm, minimum height=0.9cm, text centered,
+                 font=\small, inner sep=5pt},
+  fsbox/.style={rectangle, rounded corners=3pt, draw=black!60, fill=gray!8,
+                text width=3.5cm, minimum height=0.9cm, text centered,
+                font=\small, inner sep=5pt},
+  carr/.style={thick,->,>=Stealth},
+  sarr/.style={thick,->,>=Stealth,dashed,blue!70},
+  farr/.style={thick,->,>=Stealth,dotted,green!60!black},
+]
+
+%% Column headers
+\node[font=\bfseries\small,cyan!60!black] at (-5, 2.0) {Analyst Machine};
+\node[font=\bfseries\small,orange!70!black] at (1.8, 2.0) {VM Filesystem};
+\node[font=\bfseries\small,yellow!50!black] at (7.5, 2.0) {Docker Containers};
+
+%% Analyst side
+\node[anabox] (yaml)   at (-5,  0.5) {Local YAML scenario};
+\node[anabox] (client) at (-5, -1.0) {cli.py (paramiko)};
+\node[fsbox]  (out)    at (-5, -3.0) {outputs/ (results)};
+
+%% VM side
+\node[vmbox]  (vmtmp)  at (1.8,  0.5) {/tmp/ (YAML staging)};
+\node[vmbox]  (vmdl)   at (1.8, -3.0) {/tmp/aerosouda\_dl/};
+
+%% Container side
+\node[cntbox] (master) at (7.5,  0.5) {spark-master};
+\node[cntbox] (hdfs)   at (7.5, -1.0) {HDFS (namenode + datanodes)};
+\node[cntbox] (workers)at (7.5, -2.7) {spark-worker-1..6};
+\node[cntbox] (cntout) at (7.5, -4.2) {spark-master:\\{}/tmp/outputs/};
+
+%% Arrows
+\draw[sarr]  (yaml.east)   -- node[above,font=\scriptsize]{SFTP PUT} (vmtmp.west);
+\draw[sarr]  (vmtmp.east)  -- node[above,font=\scriptsize]{docker exec} (master.west);
+\draw[sarr]  (client.east) -- node[below,font=\scriptsize]{SSH: list /inputs/} (hdfs.west);
+\draw[sarr]  (client.east) -- node[below,font=\scriptsize]{SSH: spark-submit} (master.west);
+\draw[carr]  (hdfs.south)  -- node[left,font=\scriptsize,pos=0.5,xshift=2pt]{HDFS read} (workers.north);
+\draw[sarr]  (client.east) -- node[below,font=\scriptsize,fill=white,inner sep=1pt,pos=0.4]{docker cp} (vmdl.west);
+\draw[carr]  (cntout.west) -- (vmdl.east);
+\draw[farr]  (vmdl.west)   -- node[below,font=\scriptsize]{SFTP GET} (out.east);
+
+\end{tikzpicture}%
+}
+\caption[End-to-end data flow of the AeroSOuDA remote deployment.]{End-to-end data flow of the AeroSOuDA remote deployment.
+         Dashed blue arrows indicate SSH-mediated commands; dotted green arrows indicate
+         SFTP file transfers; solid black arrows indicate direct data reads within
+         the Docker network.}
+\label{fig:rm-dataflow}
+\end{figure}
+
+The key insight of the design is the asymmetry between the upward and downward data flows.
+In the upward direction (analyst $\to$ \gls{vm}), only the small \gls{yaml} scenario file
+(typically a few kilobytes) is transferred.  The large simulation \gls{csv} files are already
+resident on the \gls{vm}'s \gls{hdfs} storage layer, uploaded once by a \gls{vm} operator.
+In the downward direction (\gls{vm} $\to$ analyst), only the compact result artefacts are
+downloaded: an aggregated \gls{csv} (at most a few hundred rows), a scatter plot image, and a
+\gls{json} summary.  This design minimises network bandwidth consumption and makes the pipeline
+practical even on a slow connection.
+
+The simulation \gls{csv} data never leaves the \gls{vm}.  It is ingested by the Spark workers
+directly from \gls{hdfs} within the Docker bridge network, processed in memory across the six
+worker containers, and the aggregated results are written to the master's temporary directory.
+Only the aggregated output is exfiltrated to the analyst's machine.
+
+\subsection{Separation of Concerns}
+\label{subsec:rm-separation-of-concerns}
+
+The two-repository design enforces a clean separation of concerns:
+
+\begin{itemize}
+  \item Cluster (\texttt{tg-cluster/cluster/}): responsible for storage and
+        computation.  It manages the \gls{hdfs} data layer and the Spark execution engine.  Its
+        only external interface is a standard Docker Compose stack accessible via \gls{ssh}.
+  \item Client (\texttt{tg-cluster/client/}): responsible for user interaction
+        and orchestration.  It knows the analyst's intent (which \gls{csv}, which scenario) and
+        coordinates all actions on the \gls{vm} cluster via \gls{ssh} commands.  It has no
+        knowledge of Spark internals or \gls{hdfs} block placement.
+\end{itemize}
+
+This separation means that the cluster can be upgraded (more workers, larger DataNodes, different
+Spark version) without any changes to the client, and the client can be updated (new scenario
+wizard features, different output formats) without touching the cluster configuration.
+
+\subsection{Execution Phase Instrumentation}
+\label{subsec:rm-phase-instrumentation}
+
+The \texttt{scripts/processor/spark\_job.py} module emits fine-grained timing markers at
+key boundaries of the pipeline.  Each marker is printed to \texttt{stdout} with the prefix
+\texttt{METRIC:}, for example:
+
+\begin{verbatim}
+METRIC:T_INIT_SECONDS=18.432160
+METRIC:T_MAP_SECONDS=55.117832
+METRIC:T_REDUCE_SECONDS=0.009412
+METRIC:T_OUTPUT_SECONDS=0.421073
+\end{verbatim}
+
+The four markers decompose $T_{\text{job}}$ into four sequential phases:
+
+\begin{itemize}
+  \item $T_{\text{init}}$: time from \texttt{SparkSession.getOrCreate()} returning
+        to the first data-read call.  Captures \gls{jvm} initialisation, Spark context
+        setup, and worker registration.
+  \item $T_{\text{map}}$: time for the \texttt{mapPartitions().collect()} action.
+        This is the dominant phase and encompasses both \gls{hdfs} data reads (I/O) and
+        distributed Python payload parsing (computation).  Because Spark evaluates plans
+        lazily, these two sub-phases cannot be separated without an additional materialise
+        step (e.g., \texttt{cache().count()}) that would change the benchmark semantics.
+  \item $T_{\text{reduce}}$: time for the driver-side reduce loop that merges the
+        per-partition partial results into the global accumulators.  This phase is
+        $O(n_{\text{entities}})$ and is expected to be negligible.
+  \item $T_{\text{output}}$: time for constructing the output Pandas structure,
+        writing the aggregated \gls{csv}, rendering the scatter plot, and serialising the
+        \gls{json} summary.
+\end{itemize}
+
+The \texttt{tg-cluster} benchmark harness parses these markers in real time as the
+\gls{ssh} output stream arrives and records them as additional columns in the benchmark
+\gls{csv} (\texttt{t\_init\_s}, \texttt{t\_map\_s}, \texttt{t\_reduce\_s},
+\texttt{t\_output\_s}).  In parallel, a background sampling thread issues periodic
+\texttt{docker stats} queries over the same \gls{ssh} connection to record peak and mean
+worker \gls{cpu} usage (\texttt{cpu\_peak\_pct}, \texttt{cpu\_mean\_pct}) and peak
+memory consumption (\texttt{mem\_peak\_mb}) across the four Spark worker containers.
+
+This instrumentation provides the empirical basis for quantifying host-resource contention
+at scale and provides enough content to test and analyse this thesis' capacities in the next
+session.

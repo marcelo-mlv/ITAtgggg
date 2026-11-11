@@ -313,3 +313,8 @@ TSWLatexianTemp*
 ## ---
 ## Obsidian
 .obsidian/*
+
+slides/
+
+*.md
+!README.md

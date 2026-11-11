@@ -1,0 +1,225 @@
+% ─────────────────────────────────────────────────────────────────────────────
+%  Chapter 7 — Conclusions
+% ─────────────────────────────────────────────────────────────────────────────
+
+This chapter synthesises the contributions of the work, discusses the experimental
+findings in the broader context of the motivation established in Chapter~1, and
+identifies the most relevant directions for future research.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Summary of Contributions}
+\label{sec:conc-summary}
+% ─────────────────────────────────────────────────────────────────────────────
+
+This work proposed, implemented, and evaluated \gls{aerosouda} (Aerospace Simulation
+Output Distributed Architecture), a distributed computing architecture designed to
+accelerate the post-processing of aerospace simulation outputs in the context of the \gls{asa}
+platform.
+
+The central problem addressed was the analytical bottleneck that arises when large
+simulation batches, each batch potentially comprising millions of entity-state records, are
+processed serially on a single machine.  The existing \gls{asa} workflow requires the analyst to
+retrieve raw outputs centrally, compute metrics in sequence, and manually produce aggregate
+values, a workflow that becomes progressively less tractable as batch size grows.
+
+\gls{aerosouda} addresses this bottleneck through three architectural principles:
+
+\begin{enumerate}
+    \item Distributed storage.  Simulation result \gls{csv} files are ingested into
+          \gls{hdfs}, where they are partitioned and replicated across multiple DataNode
+          containers.  This eliminates the single-machine storage bottleneck and enables
+          data-local computation.
+
+    \item Parallel metric extraction.  A PySpark job, following the MapReduce
+          paradigm, processes the \gls{hdfs}-resident data in parallel across multiple executor
+          containers.  Each executor independently extracts entity-level metrics from its
+          assigned data partitions (map phase), and the driver merges the partial results into
+          a batch-level aggregate value (reduce phase).
+
+    \item Analyst-facing interface.  An interactive \gls{cli} allows the analyst to
+          define or select a scenario configuration, specifying the metric of interest and
+          the aggregate function, before job submission, without requiring knowledge of
+          Spark internals or \gls{hdfs} administration.
+\end{enumerate}
+
+Two deployment modes were implemented and validated.  The local cluster mode
+(Chapter~4) runs the entire Spark and \gls{hdfs} stack on the analyst's workstation via
+Docker Compose, providing a self-contained development and testing environment.  The
+remote cluster mode (Chapter~5) moves the compute-intensive processing to a
+dedicated virtual machine, while the analyst interacts through a lightweight Python client
+using only \gls{ssh} and \gls{sftp} as ways to communicate with the remote machine.  
+This design ensures that large simulation datasets never need to be transferred to the
+analyst's machine before any analytical reduction has occurred.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Results Discussion}
+\label{sec:conc-discussion}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The experimental evaluation presented in Chapter~6 measured the performance of the
+distributed pipeline on three analytical scenarios over two distinct batch datasets.
+
+Speedup and efficiency.
+The parallel configuration (four executors) reduced the mean job time from
+$215.33 \pm 1.24$\,s to $75.41 \pm 0.53$\,s, yielding a speedup of $S = 2.855$ and a
+parallel efficiency of $\eta = 71.4\%$.  An efficiency between $71\%$ and $79\%$ on a single-host Docker
+deployment, where all containers compete for the same physical CPU cores, memory bus, and
+disk I/O, represents a strong baseline result.  On dedicated multi-node hardware, where
+this contention is absent, further efficiency gains are plausible and should be quantified
+in future multi-node experiments.
+
+Throughput.
+The distributed pipeline processes $25\,049 \pm 177$ rows per second, compared to
+$8\,769 \pm 50$ rows per second for the single-executor baseline, a $2.86\times$
+improvement.  Crucially, only the compact analytical results (an aggregated \gls{csv}, a
+scatter plot, and a \gls{json} summary) are delivered to the analyst, while the full
+1.3\,GB dataset remains on the \gls{vm}'s \gls{hdfs}.
+
+Scalability.
+The scalability experiment (Launcher Longitude dataset, $N \in \{1, 2, 4\}$ executors)
+confirmed that \gls{aerosouda} scales beneficially with executor count: the speedup at
+$N=2$ was $1.867$ (93.4\% efficiency) and at $N=4$ was $3.232$ (80.8\% efficiency).
+The gradual drop in efficiency from $N=2$ to $N=4$ is consistent with the shared-host
+hypothesis and validates the architecture's scaling potential.
+
+Cross-dataset consistency.
+The Launcher Longitude campaign, executed with a different analytical scenario over a larger
+independent dataset (2.29M rows), achieved a higher speedup ($3.14\times$ at $N=4$) and
+parallel efficiency ($78.6\%$) than the Quick-Reaction campaign ($2.86\times$, $71.4\%$).
+This increase is consistent with Amdahl's law: the larger dataset raises the parallelisable
+fraction of each job, reducing the relative weight of fixed serial overheads and improving
+the efficiency ceiling.  Across both campaigns, the speedup ranged from $2.86\times$ to
+$3.23\times$, confirming the robustness of the distributed pipeline across different input
+volumes and analytical configurations.
+
+Remote communication overhead.
+The \gls{ssh} round-trip overhead introduced by the remote client was $0.35 \pm 0.03$\,s
+for the Quick-Reaction parallel mode and $0.75 \pm 0.32$\,s for the Launcher Longitude
+parallel mode, less than $1\%$ of total job time in both cases.  This confirms that the
+remote-execution model is practical for the dataset sizes considered in this work.
+
+Overall, the experimental results demonstrate that \gls{aerosouda} successfully reduces
+post-processing wall-clock time by $65$--$68\%$ relative to the serial baseline, with the
+measured gain increasing with dataset size, while keeping the analyst interface simple and
+the deployment infrastructure standard.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Limitations}
+\label{sec:conc-limitations}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The following limitations should be considered when interpreting the results of this work.
+
+\begin{itemize}
+    \item Single-host deployment.  All benchmark experiments were conducted with
+          Spark and \gls{hdfs} containers running on the same physical machine.  The
+          data-locality benefits of \gls{hdfs}, a primary architectural advantage, cannot
+          be fully realised in this configuration.  Measurements on a genuine multi-node
+          cluster are needed to characterise the system's production-scale performance.
+
+    \item Limited dataset coverage.  The evaluation used two datasets: one
+          1.3\,GB Quick-Reaction batch and one 1.5\,GB Launcher Longitude batch.  Smaller
+          and larger datasets, as well as datasets with substantially different entity
+          schemas and payload densities, may exhibit different throughput and
+          partition-efficiency profiles.
+
+    \item Integration with \gls{asa}.  The current implementation operates on
+          pre-exported \gls{csv} files produced by the \gls{asa}'s Asapy library.  Full end-to-end
+          integration, in which the \gls{asa} orchestrator automatically routes simulation
+          outputs to the \gls{aerosouda} cluster after each batch, has not yet been
+          implemented.
+
+    \item Metric and aggregate function coverage.  The implemented processor
+          supports Pearson correlation, mean, count, and scatter-only aggregation types.
+          Extending the system to richer analytical functions (e.g., survival analysis,
+          multi-variate regression) requires additions to the scenario schema and the
+          aggregator module.
+
+    \item Scenario \gls{yaml} restricted to entity-state fields.
+          The \gls{yaml} scenario configuration currently allows the analyst to specify
+          only quantities that appear as entity state fields inside the payload column of
+          the simulation \gls{csv}.  Unfortunately, not all variables are registered in
+          the CSV simulation result files. For instance, a variable that controls the time
+          the fighters need to fly over a specific point of the map could not be analysed
+          throught \gls{aerosouda} currently, since this information is not included in
+          said CSV files.  A solution could be integrating a file along the CSV listing
+          those variables' results separately, but that is not included in this work's
+          scope, as it lies off the \gls{aa} stage of the simulation pipeline.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Future Work}
+\label{sec:conc-future}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Several directions for future work follow directly from the limitations identified above.
+
+\begin{itemize}
+    \item Multi-node cluster evaluation.  Deploying the \gls{aerosouda} cluster
+          across physically separate machines would allow the data-locality principle to be
+          fully exercised.  A multi-node setup would also enable a more accurate Amdahl's law
+          calibration by eliminating shared-host contention.
+
+    \item Integration into the ASA workflow.  Connecting \gls{aerosouda} directly
+          to the \gls{asa} batch execution pipeline would remove the current manual \gls{csv}
+          upload step.  A webhook or queue-based trigger could initiate the distributed
+          post-processing automatically as each simulation run completes, enabling near-real-time
+          analytical feedback.
+
+    \item Batch metadata file for alias-aware analysis.
+          The most direct solution to the \gls{yaml} limitation described in
+          Section~\ref{sec:conc-limitations} is to extend the \gls{aerosouda} pipeline
+          with a batch metadata file, a lightweight \gls{json} or \gls{yaml}
+          document generated alongside the simulation \gls{csv}, containing one entry per
+          experiment with the actual alias values used in that run.
+          \noindent The \gls{csv} processor would then accept this file as an optional
+          second input, resolve alias values by experiment identifier, and expose them
+          as first-class \(x\)-variable sources in the scenario \gls{yaml}, analogous
+          to how \texttt{field\_path: "frame"} is today a special-cased non-payload
+          value.  This extension would enable any variable to be correlated directly
+          with any entity metric, without changing the structure of the simulation
+          \gls{csv} file itself.
+
+    \item Broader analytical coverage.  Extending the scenario schema to support
+          multi-variable correlations, time-series metrics, and survival probabilities would
+          increase the system's utility for \gls{cbp} analysis.  Integration with the
+          existing Asapy library \parencite{dantas2024asapy} could leverage its established
+          statistical routines while adding the distributed execution layer.
+
+    \item Evaluation under diverse workloads.  The scenarios evaluated in this
+          work used the same 1.3\,GB production-scale input file.  Benchmarks over other
+          simulation scenarios with different entity schemas and data volumes would provide a
+          more complete characterisation of the system's overhead profile under varied
+          workloads.
+
+    \item Security hardening.  The current \gls{ssh} configuration uses
+          paramiko's \texttt{AutoAddPolicy}, acceptable for a research prototype
+          but not for production use.  A deployment-ready version should enforce
+          host-key verification and restrict cluster access to known client addresses.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Final Remarks}
+\label{sec:conc-final}
+% ─────────────────────────────────────────────────────────────────────────────
+
+This work demonstrated that the analytical bottleneck in scenario-based aerospace
+simulation, the phase between raw simulation output and decision-ready analytical
+products, can be substantially reduced through a principled application of distributed
+computing.  The \gls{aerosouda} architecture is not a new simulation engine: it is a
+post-processing infrastructure that sits between the existing \gls{asa} workflow and the
+analyst's workspace, transforming large batches of raw simulation records into compact,
+meaningful results without burdening the analyst's machine.
+
+The measured $2.85\times$ speedup, achieved on conservative single-host hardware, provides
+empirical evidence that the MapReduce paradigm is well suited to the independent, parallel
+structure of simulation batch post-processing.  The simplicity of the analyst interface  
+a guided \gls{cli} requiring no Spark or \gls{hdfs} expertise, further supports the
+system's practical utility in an operational military planning context.
+
+The work positions itself within a broader research gap identified in the related-work survey
+(Section~2.7): few systems target distributed post-processing of already-persisted simulation
+outputs in a scenario-based aerospace-defense environment with a user-accessible,
+Python-centric workflow.  \gls{aerosouda} addresses that gap with a modular, container-based
+implementation that can be extended, adapted, and eventually integrated into the production
+\gls{asa} ecosystem.
